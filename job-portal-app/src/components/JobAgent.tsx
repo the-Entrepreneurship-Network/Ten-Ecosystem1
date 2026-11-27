@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import KineticGrid from './KineticGrid';
 
 /*
@@ -19,17 +19,29 @@ const inter = { fontFamily: "'Inter', sans-serif" };
 
 /*
  * The application tracker, per the job-hunt skill's fit-and-track.md: one row
- * per opening — date, company, role, url, fit, status, notes — statuses
- * found | emailed | tailored | applied | closed, and never a duplicate URL.
- * Lives in localStorage: applications are personal to this browser's owner.
+ * per opening, never a duplicate URL. Saved to the student's account
+ * (/api/v2/jobs/tracker), so a phone and a laptop see the same rows and the
+ * resume portal can add to them. Rows this browser kept before are brought
+ * across once. An application sent starts the clock on the drafted day-4 and
+ * day-10 follow-ups.
  */
-type TrackStatus = 'found' | 'emailed' | 'tailored' | 'applied' | 'closed';
+type TrackStatus = 'found' | 'tailored' | 'emailed' | 'applied' | 'interview' | 'offer' | 'closed';
+type FollowUp = { afterDays: number; subject: string; body: string };
 type TrackRow = {
   date: string; company: string; role: string; url: string;
   fit: number; status: TrackStatus; notes: string;
+  to?: string; followUps?: FollowUp[]; appliedAt?: string | null; followUpsSent?: number[];
 };
 const TRACKER_KEY = 'ten_job_tracker';
-const TRACK_STATUSES: TrackStatus[] = ['found', 'emailed', 'tailored', 'applied', 'closed'];
+const TRACK_STATUSES: TrackStatus[] = ['found', 'tailored', 'emailed', 'applied', 'interview', 'offer', 'closed'];
+/* The two portals hand a job or a resume to each other through the browser. */
+const HANDOFF_JOB = 'ten_handoff_job';
+const HANDOFF_RESUME = 'ten_handoff_resume';
+/* Follow-ups that are due and not marked sent. */
+const dueFollowUps = (r: TrackRow): FollowUp[] => (r.appliedAt && (r.status === 'applied' || r.status === 'emailed')
+  ? (r.followUps || []).filter((f) => Date.now() - new Date(r.appliedAt as string).getTime() >= f.afterDays * 86400000
+    && !(r.followUpsSent || []).includes(f.afterDays))
+  : []);
 
 /**
  * Remote or onsite, read from what the posting actually says. Hybrid is worth
@@ -142,20 +154,11 @@ const gmailUrl = (to: string, subject: string, body: string) =>
 const mailtoUrl = (to: string, subject: string, body: string) =>
   `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
-function loadTracker(): TrackRow[] {
+/** The rows this browser kept before the tracker moved to the account. */
+function localTracker(): TrackRow[] {
   try { return JSON.parse(localStorage.getItem(TRACKER_KEY) || '[]'); } catch { return []; }
 }
-function saveTracker(rows: TrackRow[]) {
-  try { localStorage.setItem(TRACKER_KEY, JSON.stringify(rows)); } catch { /* full */ }
-}
-/** Insert or update by URL — the spec's no-duplicates rule. */
-function upsertTrack(rows: TrackRow[], row: Omit<TrackRow, 'date'>): TrackRow[] {
-  const existing = rows.find((r) => r.url === row.url);
-  if (existing) {
-    return rows.map((r) => r.url === row.url ? { ...r, status: row.status, notes: row.notes || r.notes } : r);
-  }
-  return [{ ...row, date: new Date().toISOString().slice(0, 10) }, ...rows].slice(0, 100);
-}
+const json = (method: string, body?: unknown) => ({ method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
 
 type Profile = { name: string | null; role: string; seniority: string; location: string; skills: string[]; college?: string };
 type Fit = { percent: number; band: string; advice: string; confidence: number; reasons: string[] };
@@ -218,27 +221,65 @@ export default function JobAgent() {
   const [manager, setManager] = useState('');
   const [cacheNote, setCacheNote] = useState<string | null>(null);
   const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
-  const [tracker, setTracker] = useState<TrackRow[]>(loadTracker);
+  const [tracker, setTracker] = useState<TrackRow[]>([]);
+  const [alerts, setAlerts] = useState<{ alerts: boolean; weeklyEmail: boolean; canNotify: boolean } | null>(null);
   const [ai, setAi] = useState<Record<string, AiMatch>>({});
   const [aiNote, setAiNote] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const matchRun = useRef(0);
 
-  const track = (job: Job, status: TrackStatus) => {
-    const next = upsertTrack(tracker, {
-      company: job.company || '', role: job.title, url: job.directUrl || job.url,
-      fit: job.fit5 || Math.max(1, Math.round((job.fit?.percent || 20) / 20)),
-      status, notes: '',
+  /* The tracker and the alert settings, from the account; this browser's old rows come across once. */
+  useEffect(() => {
+    (async () => {
+      try {
+        let data = await (await fetch(`${API}/tracker`)).json();
+        const old = localTracker();
+        if (data.ok && !data.rows.length && old.length) {
+          await fetch(`${API}/tracker/import`, json('POST', { rows: old }));
+          data = await (await fetch(`${API}/tracker`)).json();
+        }
+        if (data.ok) { setTracker(data.rows); if (old.length) localStorage.removeItem(TRACKER_KEY); }
+      } catch { /* the tracker stays empty; nothing is lost on the server */ }
+      fetch(`${API}/alerts`).then((r) => r.json()).then((a) => { if (a.ok) setAlerts(a); }).catch(() => {});
+    })();
+    /* A resume handed over by the resume portal is hunted straight away. */
+    let handed = '';
+    try { handed = localStorage.getItem(HANDOFF_RESUME) || ''; localStorage.removeItem(HANDOFF_RESUME); } catch { /* none */ }
+    if (handed.trim()) hunt(undefined, handed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* One row saved to the account; the answer (with its follow-up clock) replaces the guess. */
+  async function saveRow(row: Partial<TrackRow> & { url: string }) {
+    setTracker((rows) => {
+      const has = rows.some((r) => r.url === row.url);
+      return has ? rows.map((r) => (r.url === row.url ? { ...r, ...row } : r))
+        : [{ date: new Date().toISOString().slice(0, 10), company: '', role: '', fit: 0, status: 'found', notes: '', ...row } as TrackRow, ...rows];
     });
-    setTracker(next); saveTracker(next);
-  };
-  const setTrackStatus = (url: string, status: TrackStatus) => {
-    const next = tracker.map((r) => r.url === url ? { ...r, status } : r);
-    setTracker(next); saveTracker(next);
-  };
+    try {
+      const out = await (await fetch(`${API}/tracker`, json('PUT', row))).json();
+      if (out.ok) setTracker((rows) => rows.map((r) => (r.url === row.url ? out.row : r)));
+    } catch { /* kept on screen; saved next time it changes */ }
+  }
+  const track = (job: Job, status: TrackStatus, extra: Partial<TrackRow> = {}) => saveRow({
+    company: job.company || '', role: job.title, url: job.directUrl || job.url,
+    fit: job.fit5 || Math.max(1, Math.round((job.fit?.percent || 20) / 20)), status, ...extra,
+  });
+  const setTrackStatus = (url: string, status: TrackStatus) => saveRow({ url, status });
   const untrack = (url: string) => {
-    const next = tracker.filter((r) => r.url !== url);
-    setTracker(next); saveTracker(next);
+    setTracker((rows) => rows.filter((r) => r.url !== url));
+    fetch(`${API}/tracker?url=${encodeURIComponent(url)}`, { method: 'DELETE' }).catch(() => {});
+  };
+  const saveAlerts = (next: { alerts?: boolean; weeklyEmail?: boolean }) => {
+    setAlerts((a) => (a ? { ...a, ...next } : a));
+    fetch(`${API}/alerts`, json('PUT', next)).catch(() => {});
+  };
+  /* Opens the resume portal with this job loaded: its match, and "Tailor resume". */
+  const tailorInResumePortal = (j: Job) => {
+    try {
+      localStorage.setItem(HANDOFF_JOB, JSON.stringify({ title: j.title, company: j.company, url: j.directUrl || j.url, location: j.location, description: j.description || '', tags: j.tags || [] }));
+    } catch { /* storage blocked: the resume portal opens without it */ }
+    window.location.href = '/resume-portal/#agent';
   };
   const tracked = (job: Job) => tracker.some((r) => r.url === (job.directUrl || job.url));
 
@@ -276,7 +317,9 @@ export default function JobAgent() {
       const data = await res.json();
       if (!data.ok) throw new Said(data.error || 'Could not write the documents.');
       setMaterials({ ...data, toEmail, posting: { title: job.title, company: job.company || '', description: job.description || '', tags: job.tags || [] } });
-      track(job, 'tailored'); /* fit-and-track.md: tailoring is a tracked event */
+      /* fit-and-track.md: tailoring is a tracked event. The drafted follow-ups
+         and the recruiter's address go with it, for the reminders. */
+      track(job, 'tailored', { followUps: data.coldEmail?.followUps || [], ...(toEmail ? { to: toEmail } : {}) });
     } catch (e) {
       setError(e instanceof Said ? e.message : 'Could not write the documents. Paste your resume text and try again.');
     } finally {
@@ -618,6 +661,10 @@ export default function JobAgent() {
                              className="rounded-lg bg-emerald-400/90 px-3 py-1.5 text-[12px] font-bold text-[#06210f] hover:bg-emerald-300">
                             Open the job
                           </a>
+                          <button type="button" onClick={() => tailorInResumePortal(j)}
+                            className="rounded-lg border border-white/20 px-3 py-1.5 text-[12px] text-white/85 hover:border-white/50">
+                            Tailor my resume ↗
+                          </button>
                           <button
                             type="button"
                             onClick={() => track(j, 'found')}
@@ -751,6 +798,21 @@ export default function JobAgent() {
                   </p>
                 </div>
 
+                {/* Job alerts: the phone by default, email only if asked for. */}
+                {alerts && alerts.canNotify && (
+                  <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-[12.5px] text-white/70">
+                    <span className="font-semibold text-white">Job alerts</span>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={alerts.alerts} onChange={(e) => saveAlerts({ alerts: e.target.checked })} />
+                      Tell my phone when new jobs fit my resume
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={alerts.weeklyEmail} onChange={(e) => saveAlerts({ weeklyEmail: e.target.checked })} />
+                      Also email me a weekly digest
+                    </label>
+                  </div>
+                )}
+
                 {/* The application tracker — fit-and-track.md as a panel. */}
                 {tracker.length > 0 && (
                   <div className="mt-8">
@@ -758,7 +820,7 @@ export default function JobAgent() {
                       <h2 className="text-xl font-semibold text-white">
                         Application tracker <span className="text-white/40">({tracker.length})</span>
                       </h2>
-                      <span className="text-[11px] uppercase tracking-[0.14em] text-violet-300/80">saved in this browser</span>
+                      <span className="text-[11px] uppercase tracking-[0.14em] text-violet-300/80">saved to your account</span>
                     </div>
                     <div className="space-y-2">
                       {tracker.map((r) => (
@@ -769,6 +831,20 @@ export default function JobAgent() {
                               {r.role}{r.company ? ` — ${r.company}` : ''}
                             </a>
                             <p className="text-[11px] text-white/40">{r.date} · fit {r.fit}/5</p>
+                            {/* A drafted follow-up whose day has come: send it from your own mail. */}
+                            {dueFollowUps(r).map((f) => (
+                              <div key={f.afterDays} className="mt-1.5 flex flex-wrap items-center gap-2 text-[11.5px]">
+                                <span className="text-amber-200/90">Day {f.afterDays} follow-up is due.</span>
+                                {r.to && (
+                                  <a href={gmailUrl(r.to, f.subject, f.body)} target="_blank" rel="noopener noreferrer"
+                                    className="rounded-md border border-white/15 px-2 py-0.5 text-white/80 hover:border-white/40">Open in Gmail</a>
+                                )}
+                                <button type="button" onClick={() => navigator.clipboard?.writeText(f.body)}
+                                  className="rounded-md border border-white/15 px-2 py-0.5 text-white/80 hover:border-white/40">Copy it</button>
+                                <button type="button" onClick={() => saveRow({ url: r.url, followUpsSent: [f.afterDays] })}
+                                  className="rounded-md border border-emerald-300/30 px-2 py-0.5 text-emerald-200/90 hover:border-emerald-200/60">Mark sent</button>
+                              </div>
+                            ))}
                           </div>
                           <select
                             value={r.status}

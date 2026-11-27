@@ -1148,6 +1148,16 @@ router.post('/search', upload.single('file'), async (req, res) => {
         : `Opening via ${j.source}`;
     });
 
+    /* What this student hunts for, kept for the daily alert of new openings
+       that fit (services/v2/careerAlerts.js). What they see now is "seen". */
+    if (req.studioSubject) {
+      const s = req.studioSubject;
+      require('../../models/JobAlert').updateOne({ subject: String(s._id || s.employeeId) }, {
+        $set: { employeeId: String(s.employeeId || ''), profile: { role: profile.role, seniority: profile.seniority, location: profile.location, skills: profile.skills, years: profile.years } },
+        $push: { seen: { $each: shown.slice(0, 80).map((j) => `${j.title}|${j.company}`.toLowerCase().trim()), $slice: -500 } },
+      }, { upsert: true, setDefaultsOnInsert: true }).catch((err) => console.warn('[job-alerts] save:', err.message));
+    }
+
     res.json({
       ok: true,
       profile,
@@ -1482,6 +1492,30 @@ router.post('/reword', async (req, res) => {
     res.json({ ok: true, ...(await jobReword.reword(resumeText, job, subjectKey(req))) });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Could not reword this just now. Your documents are unchanged.' });
+  }
+});
+
+/* The tracker, shared with the resume portal (routes/v2/jobTracker.js). */
+router.use('/tracker', require('./jobTracker'));
+
+/* The student's job alerts: on the phone daily (default on), and a weekly email only if asked for. */
+router.get('/alerts', async (req, res) => {
+  const s = req.studioSubject || {};
+  const a = await require('../../models/JobAlert').findOne({ subject: String(s._id || s.employeeId || '') }).lean().catch(() => null);
+  res.json({ ok: true, alerts: a ? a.alerts !== false : true, weeklyEmail: !!(a && a.weeklyEmail), canNotify: !!s.employeeId });
+});
+router.put('/alerts', async (req, res) => {
+  const s = req.studioSubject || {};
+  const b = bodyOf(req);
+  const set = {};
+  if (typeof b.alerts === 'boolean') set.alerts = b.alerts;
+  if (typeof b.weeklyEmail === 'boolean') set.weeklyEmail = b.weeklyEmail;
+  try {
+    await require('../../models/JobAlert').updateOne({ subject: String(s._id || s.employeeId || '') },
+      { $set: { ...set, employeeId: String(s.employeeId || '') } }, { upsert: true, setDefaultsOnInsert: true });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(503).json({ ok: false, error: 'Could not save that just now.' });
   }
 });
 

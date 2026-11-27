@@ -1103,6 +1103,9 @@ router.post('/match', (req, res) => {
   });
 });
 
+/* The application tracker, shared with the job portal (routes/v2/jobTracker.js). */
+router.use('/tracker', require('./jobTracker'));
+
 router.post('/build', (req, res) => {
   const b = bodyOf(req);
   const built = buildResume(b.details || b.text || b);

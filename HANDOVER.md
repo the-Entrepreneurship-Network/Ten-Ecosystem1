@@ -624,6 +624,24 @@ From the sidebar of `hr-portal.html`:
   The converter was checked against two real exports. pdf-parse fails some
   files a call or two after a restart, including PDFs this portal itself
   renders, so `pdfText` tries three times.
+- **One flow across both portals.** A job card's "Tailor my resume" opens the
+  resume portal with that job loaded (its match, "Tailor resume" and "Apply");
+  the resume portal's "Find jobs for this resume" hunts with that resume on
+  the job portal. They hand over through `localStorage` (`ten_handoff_job`,
+  `ten_handoff_resume`). A handed-over job stays open when the student then
+  pastes a resume: the chat's automatic job search is skipped for it.
+- **The tracker is on the account** (`JobTrack`, `routes/v2/jobTracker.js`,
+  at `/api/v2/jobs/tracker` and `/api/v2/resume/tracker`): found, tailored,
+  emailed, applied, interview, offer, closed. Rows a browser kept in
+  `localStorage` before are brought across once. Applying or emailing starts
+  the clock on the drafted day-4 and day-10 follow-ups; a due one shows in the
+  tracker with its text, and the daily job reminds the student once.
+- **Job alerts** (`JobAlert`, `services/v2/careerAlerts.js`): every search saves
+  what the student hunts for and what they saw. Daily, openings from the last
+  7 days that fit at 60%+ and were not seen go to the student as a portal and
+  phone notification, never by email. A weekly email digest is sent only to
+  students who switch it on in the Job Portal (the Monday mail already uses
+  most of the month's email allowance).
 
 **Hackathon portal** (`routes/v2/hackathons.js`)
 - A public board; teams register with UPI payment and get a team code.
@@ -1274,6 +1292,8 @@ rest.
 | `StudentDocument` (`models/new/`) | one student's uploads and document links | `studentId` unique |
 | `GrowthCampaign`, `GrowthQuotaGrant`, `MailHistory` | a campaign; a quota top-up; one mail sent | `MailHistory` is what the quota counts |
 | `CareerAiCall` (`careeraicalls`) | one Gemini answer for the job or resume agent; also the count for the daily AI limits | `key` (sha256 of the question) unique; `createdAt` expires after 30 days; index on `subject`, `createdAt` |
+| `JobAlert` (`jobalerts`) | what a student last hunted for, for the daily job alert | `subject` unique; `alerts` (default on), `weeklyEmail` (default off); `seen` holds the last 500 opening keys |
+| `JobTrack` (`jobtracks`) | one opening in a student's application tracker | unique on `subject` + `url`; `appliedAt` starts the follow-up clock; `followUpsSent`, `nudged` |
 | `JobOpening` (`jobopenings`) | one opening the job collector stored | `key` (title\|company) unique; `seenAt` expires after 30 days; text index on title, tags, description |
 | `CollegeContact`, `CollegeSite` | a placement-office address; a college host in the crawl queue | `email` unique; `host` unique |
 | `Notification`, `EcosystemNotification`, `PushSubscription` | the two notification systems (§7.1); a browser push endpoint | |
@@ -1387,6 +1407,7 @@ server's clock, and **whether the EC2 box is on UTC is UNSURE**:
 | 02:37, 08:37, 14:37, 20:37 IST | College discovery crawl (sends nothing) | `services/collegeDiscovery.js` | `COLLEGE_AGENT_CRON=off` |
 | 07:17, 19:17 IST | Idea agent | `services/ideaAgent.js` | off unless `IDEA_AGENT_ENABLED=true` |
 | Every 6 h at :17 (server time), and 3 min after a start when fewer than 50 are stored | Job collector: every company board, then each role, links checked, into `JobOpening` (§7.6) | `routes/v2/jobAgent.js` (`collectOnce`), scheduled in `server.js` | `JOB_COLLECTOR_CRON=off`; worker 0 only |
+| Daily at 09:43 (server time) | Career Studio nudges: a drafted follow-up that is due (day 4, day 10), and new openings that fit a student's last hunt; portal and phone only, plus the weekly digest email for students who switched it on (§7.6) | `services/v2/careerAlerts.js` (`runDaily`), scheduled in `server.js` | `CAREER_ALERTS_CRON=off`; worker 0 only |
 | At boot | Resume interrupted college sends; employee-ID counter alignment; reseed AutoTask + CodingQuestion if 100 or fewer AutoTasks; SMTP check; VAPID setup | various | `COLLEGE_RESUME_ON_BOOT=0` for the first |
 | On request only | Growth campaign sending (not resumed after a restart) | `services/growthSender.js` | — |
 
@@ -1486,7 +1507,7 @@ except SMTP, which fails silently (§11). By area:
 | Attendance agent | `ATTENDANCE_AGENT_ENABLED`, `ATTENDANCE_REPORT_CRON`, `ATTENDANCE_REPORT_DAY`, `ATTENDANCE_REPORT_TO`, `ATTENDANCE_TZ`, `ATTENDANCE_LOGIN_RETENTION_DAYS`, `ATTENDANCE_TRANSPORT`, `N8N_ATTENDANCE_WEBHOOK_URL`, `N8N_WEBHOOK_SECRET`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG`, `ATTENDANCE_SHEET_URL` / `_ID` / `_CSV_URL` / `_GID`, `ATTENDANCE_SHEET_CACHE_SECONDS`, `ATTENDANCE_REQUIRED_PER_DAY`, `ATTENDANCE_INCLUDE_PORTAL_LOGINS` |
 | Payments | `PAYMENT_ENABLED`, `PAYMENT_PROVIDER`, `UPI_ID`, `PAYMENTSETU_API_KEY`, `SETU_CLIENT_ID`, `SETU_CLIENT_SECRET`, `SETU_SCHEME_ID`, `SETU_BASE_URL`, `SETU_WEBHOOK_SECRET`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` |
 | Schedulers | `ENABLE_AUTOMATION_CRON`, `DISABLE_CRON_JOBS`, `ENABLE_CODE_RUNNER` |
-| Other | `INSTANTLY_API_KEY`, `JOB_CACHE_PATH`, `CAREER_AI_PER_STUDENT`, `CAREER_AI_PER_DAY` (0 switches the career AI off), `CAREER_AI_WAIT_MS`, `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `JOOBLE_API_KEY`, `JOOBLE_HOST`, `JOB_COLLECTOR_CRON`, `GITHUB_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME`, `GITHUB_OFFICIAL_REPO`, `GAME_BASE_URL`, `GAME_USAGE_KEY`, `DAO_PROPOSAL_DEPOSIT`, `DAO_QUORUM_VOTERS`, `DAO_VOTING_DAYS`, `PUBLIC_INTERNS_FLOOR`, `PUBLIC_INTERNS_FLOOR_AT` |
+| Other | `INSTANTLY_API_KEY`, `JOB_CACHE_PATH`, `CAREER_AI_PER_STUDENT`, `CAREER_AI_PER_DAY` (0 switches the career AI off), `CAREER_AI_WAIT_MS`, `CAREER_ALERTS_CRON`, `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `JOOBLE_API_KEY`, `JOOBLE_HOST`, `JOB_COLLECTOR_CRON`, `GITHUB_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME`, `GITHUB_OFFICIAL_REPO`, `GAME_BASE_URL`, `GAME_USAGE_KEY`, `DAO_PROPOSAL_DEPOSIT`, `DAO_QUORUM_VOTERS`, `DAO_VOTING_DAYS`, `PUBLIC_INTERNS_FLOOR`, `PUBLIC_INTERNS_FLOOR_AT` |
 
 `.env.example` is missing many of the optional names above: all the
 `COLLEGE_AGENT_*`, `ATTENDANCE_*`, `WHATSAPP_*`, `N8N_*`, `IDEA_AGENT_*` and
