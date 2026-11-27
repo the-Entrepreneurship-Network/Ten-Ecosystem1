@@ -62,6 +62,21 @@ describe('every paid track is worth more than it costs', () => {
     }
   });
 
+  it('a waived certificate fee is worth exactly its price on My Certificates', () => {
+    // A second copy of the prices here kept ₹100 / ₹1000 / ₹2500 after they
+    // changed, and every track advertised a saving several times too big.
+    const { CERT_PRICES } = require('../../config/payment');
+    expect(cfg.CERTIFICATE_VALUES).toEqual({
+      cert_expert: CERT_PRICES.expert, cert_nano_degree: CERT_PRICES.nano_degree, cert_fellowship: CERT_PRICES.fellowship
+    });
+  });
+
+  it('the Starter tagline stays true: the Fellowship fee alone is what the track costs', () => {
+    const b = cfg.getBenefitsFor('1month');
+    expect(b.tagline).toBe('The Fellowship fee alone is what this track costs.');
+    expect(b.certificateValue).toBe(b.price);
+  });
+
   it('a free track gets no bundle at all', () => {
     ['45days', '3months', '6months', null, undefined, 'nonsense']
       .forEach((t) => expect(cfg.getBenefitsFor(t)).toBeNull());

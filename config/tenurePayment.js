@@ -102,7 +102,16 @@ function isExempt(student) {
  * handed over — the student still has to finish the programme and meet the
  * eligibility bar. The wording on screen says exactly that.
  */
-const CERTIFICATE_VALUES = { cert_expert: 100, cert_nano_degree: 1000, cert_fellowship: 2500 };
+// A waived fee is worth exactly what the student would otherwise pay: the one
+// price setting in config/payment.js. This used to be a second copy, and it
+// kept the old prices (₹100 / ₹1000 / ₹2500) after those changed, so the
+// payment screen advertised savings that were no longer real.
+const { CERT_PRICES } = require('./payment');
+const CERTIFICATE_VALUES = {
+    cert_expert:      CERT_PRICES.expert,
+    cert_nano_degree: CERT_PRICES.nano_degree,
+    cert_fellowship:  CERT_PRICES.fellowship
+};
 const CERTIFICATE_LABELS = {
     cert_expert:      'Expert Certificate',
     cert_nano_degree: 'Nano Degree',
@@ -124,17 +133,20 @@ const COIN_RUPEE_VALUE = 0.5;
 const TENURE_BENEFITS = {
     '1month': {
         name: 'Starter',
-        tagline: 'The Nano Degree fee alone is what this track costs.',
+        // The Fellowship fee, not the Nano Degree's: at ₹500 the Nano Degree left
+        // this track worth less than its price (owner's choice, 27 Nov 2026).
+        // Students already approved keep the waiver they were granted.
+        tagline: 'The Fellowship fee alone is what this track costs.',
         badge: '',
         coins: 500,
-        certificate: 'cert_nano_degree',
+        certificate: 'cert_fellowship',
         extras: [
             { label: 'Full portal — tasks, quizzes, projects, attendance', worth: 0 }
         ]
     },
     '15days': {
         name: 'Accelerate',
-        tagline: 'The Fellowship fee alone is ₹1,000 more than this track costs.',
+        tagline: 'Faster reviews and a mentor session, with the Fellowship fee included.',
         badge: 'MOST POPULAR',
         coins: 1000,
         certificate: 'cert_fellowship',
