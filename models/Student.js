@@ -173,6 +173,8 @@ const studentsSchema = new mongoose.Schema({
     },
 
     employeeIdOverride:  { type: String, default: null },
+    // The ID a student's own change replaced, so HR can restore it after a typo.
+    employeeIdBeforeOverride: { type: String, default: null },
 
     // For a WhatsApp joiner this is deliberately EARLIER than joiningDate:
     // they attended through WhatsApp before they had a portal account. The

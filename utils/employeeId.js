@@ -125,12 +125,52 @@ async function isEmployeeIdAvailable(employeeId, excludeStudentId = null) {
     return { available: true };
 }
 
+/**
+ * An Employee ID a student typed for themselves, tidied and checked.
+ *
+ * A WhatsApp joiner types the ID from their offer letter, and what they type
+ * replaces the one the portal issued: attendance, submissions and the session
+ * all move onto it. Nothing checked its shape, so a typo became the student's
+ * ID, and the ID on their letter, their WhatsApp group and the attendance form
+ * no longer matched the portal's. "ten/sde/1266 " is TEN/SDE/1266; anything
+ * that is not TEN/<letters>/<number>, the shape formatEmployeeId prints, is
+ * refused before it replaces anything.
+ *
+ * For a student's own change only. Admins may set other shapes on purpose,
+ * which is why isEmployeeIdAvailable does not apply this.
+ *
+ * @returns {{ok: true, id: string} | {ok: false, reason: string}}
+ */
+function typedEmployeeId(value) {
+    const id = String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!id) return { ok: false, reason: 'Employee ID cannot be empty.' };
+    if (!/^TEN\/[A-Z]{2,10}\/\d{3,10}$/.test(id)) {
+        return { ok: false, reason: 'That does not look like a TEN Employee ID. It should look like TEN/SDE/1234. Please type it exactly as it is on your offer letter.' };
+    }
+    return { ok: true, id };
+}
+
+/**
+ * Move everything keyed by a student's Employee ID onto their new one.
+ *
+ * One list, for every path that changes a student's own ID. The onboarding
+ * wizard had its own shorter copy that moved attendance and submissions only,
+ * so tasks, badges and documents stayed behind on the old ID.
+ */
+async function moveEmployeeIdRecords(oldId, newId) {
+    const keyed = ['Attendance', 'Submission', 'TaskAssignment', 'BadgeAward', 'DocumentHistory'];
+    await Promise.all(keyed.map((name) =>
+        require('../models/' + name).updateMany({ employeeId: oldId }, { $set: { employeeId: newId } })));
+}
+
 module.exports = {
     COUNTER_NAME,
     FIRST_SEQUENCE,
     formatEmployeeId,
     generateEmployeeId,
     isEmployeeIdAvailable,
+    typedEmployeeId,
+    moveEmployeeIdRecords,
     initEmployeeIdCounter,
     findHighestExistingSequence
 };

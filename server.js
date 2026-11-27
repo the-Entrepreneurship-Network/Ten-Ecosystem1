@@ -3530,6 +3530,8 @@ app.get("/payment-return",    (req,res)=>{ res.sendFile(path.join(__dirname,"pub
 const {
     generateEmployeeId,
     isEmployeeIdAvailable,
+    typedEmployeeId,
+    moveEmployeeIdRecords,
     initEmployeeIdCounter
 } = require("./utils/employeeId");
 
@@ -6198,10 +6200,12 @@ app.post(["/save-employee-id-override", "/api/v2/student/save-employee-id-overri
       return res.status(401).json({ success: false, message: "Please sign in to continue." });
     }
 
-    const newEmployeeId = String(req.body.employeeIdOverride || "").trim();
-    if (!newEmployeeId) {
-      return res.json({ success: false, message: "Employee ID cannot be empty" });
+    // The same check as the onboarding wizard: see utils/employeeId.typedEmployeeId.
+    const typed = typedEmployeeId(req.body.employeeIdOverride);
+    if (!typed.ok) {
+      return res.json({ success: false, message: typed.reason });
     }
+    const newEmployeeId = typed.id;
 
     const student = await Student.findOne({ employeeId: currentEmployeeId });
     if (!student) {
@@ -6229,20 +6233,17 @@ app.post(["/save-employee-id-override", "/api/v2/student/save-employee-id-overri
       });
     }
 
+    student.employeeIdBeforeOverride = oldEmployeeId;
     student.employeeIdOverride = newEmployeeId;
     student.employeeId = newEmployeeId;
     await student.save();
+    // Before the cascade, so a failure there cannot leave the session on an
+    // ID the student no longer holds.
+    if (req.session && req.session.student) req.session.student.employeeId = newEmployeeId;
 
     // Cascade the change to everything keyed on the old ID.
     try {
-      await Promise.all([
-        Attendance.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-        Submission.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-        TaskAssignment.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-        BadgeAward.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-        DocumentHistory.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-      ]);
-      if (req.session && req.session.student) req.session.student.employeeId = newEmployeeId;
+      await moveEmployeeIdRecords(oldEmployeeId, newEmployeeId);
     } catch (cascadeErr) {
       console.error('Employee ID cascade error:', cascadeErr);
       // Best-effort: the student document is already updated.
