@@ -625,18 +625,14 @@ async function topicScreen(slug, n) {
   if (!ok) { view.innerHTML = '<div class="note bad">' + esc(d.message || 'Locked.') + '</div>'; return; }
   const t = d.topic;
   /*
-   * `youtube.com/embed?listType=search&list=…` is a form YouTube withdrew: it
-   * answers "Error 153 — video player configuration error", which is what two
-   * thirds of these topics were showing. Only ids are ever embedded now, and
-   * when there is no id at all the page says so and hands over a search rather
-   * than staging a player that cannot work.
+   * Each topic's videos come from open libraries and non-YouTube platforms,
+   * picked per topic (data/learn/<slug>.json, scripts/learn/find-videos.js).
+   * The page links nowhere: the player is the only thing from outside, and
+   * "Change video" steps through the topic's list and wraps, so a video that
+   * has gone or will not play is one press from the next.
    */
-  const vids = Array.isArray(t.videoIds) ? t.videoIds : (t.videoId ? [t.videoId] : []);
+  const vids = Array.isArray(t.videos) ? t.videos : [];
   let vidAt = 0;
-  const searchUrl = 'https://www.youtube.com/results?search_query='
-    + encodeURIComponent(t.videoSearch || t.title);
-  const embed = (id) => 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id)
-    + '?rel=0&modestbranding=1';
 
   view.innerHTML = `
     <button class="ghost" id="back">← ${esc(d.moduleName || slug)}</button>
@@ -653,22 +649,18 @@ async function topicScreen(slug, n) {
     <div class="card" style="margin-top:14px;">
       <div class="tag">Watch this before the exam</div>
       ${vids.length ? `
-        <iframe class="vid" id="vframe" src="${esc(embed(vids[0]))}" title="Video for ${esc(t.title)}"
-          allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen
+        <iframe class="vid" id="vframe" src="${esc(vids[0])}" title="Video for ${esc(t.title)}"
+          allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen
           referrerpolicy="strict-origin-when-cross-origin"></iframe>
         <div class="vrow">
           <span class="vcount" id="vcount">Video 1 of ${vids.length}</span>
-          ${vids.length > 1 ? '<button class="sec" id="vnext">Not playing? Show another →</button>' : ''}
-          <a class="sec btn" href="${esc(searchUrl)}" target="_blank" rel="noopener">Search YouTube for this topic ↗</a>
+          ${vids.length > 1 ? '<button class="sec" id="vnext">Video not working? Change video</button>' : ''}
         </div>`
-      : `<div class="note">No video is pinned to this topic yet. Open a search for it — any one of the
-           results counts, and the reading above is the part the exam is set from.</div>
-         <div class="vrow">
-           <a class="pri btn" href="${esc(searchUrl)}" target="_blank" rel="noopener">Find a video for this topic ↗</a>
-         </div>`}
-      ${d.videoDoneAt ? '<div class="note good">Video marked as watched.</div>'
-        : `<div class="note">The exam unlocks once you have watched it through.</div>
-           <button class="sec" id="vdone">I have watched the whole video</button>`}
+      : `<div class="note">There is no video for this topic yet. The reading above is what the exam is set from.</div>`}
+      ${d.videoDoneAt ? '<div class="note good">' + (vids.length ? 'Video marked as watched.' : 'The exam is open.') + '</div>'
+        : vids.length ? `<div class="note">The exam unlocks once you have watched it through.</div>
+           <button class="sec" id="vdone">I have watched the whole video</button>`
+        : '<button class="sec" id="vdone">I have read this topic. Open the exam</button>'}
     </div>
     <div class="card" style="margin-top:14px;">
       <h2>Topic exam</h2>
@@ -679,11 +671,11 @@ async function topicScreen(slug, n) {
         : `<button class="pri" id="exam" style="margin-top:12px;" ${d.videoDoneAt ? '' : 'disabled'}>Start the exam</button>`}
     </div>`;
   $('back').onclick = () => moduleScreen(slug);
-  // "Show another" steps through the pool and wraps, so a learner who is not
+  // "Change video" steps through the list and wraps, so a learner who is not
   // being served by one video is never stuck with it.
   if ($('vnext')) $('vnext').onclick = () => {
     vidAt = (vidAt + 1) % vids.length;
-    $('vframe').src = embed(vids[vidAt]);
+    $('vframe').src = vids[vidAt];
     $('vcount').textContent = 'Video ' + (vidAt + 1) + ' of ' + vids.length;
   };
   if ($('vdone')) $('vdone').onclick = async () => {

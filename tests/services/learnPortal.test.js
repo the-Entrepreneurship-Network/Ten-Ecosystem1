@@ -44,7 +44,9 @@ describe('one module per domain', () => {
       expect(t.technical.length).toBeGreaterThan(80);
       expect(t.simple.length).toBeGreaterThan(30);
       expect(t.simple.length).toBeLessThan(t.technical.length);
-      expect(t.videoId || t.videoSearch).toBeTruthy();
+      // Videos are optional per topic (none is better than a wrong one), and
+      // only ever an allowed open-source embed.
+      t.videos.forEach((v) => expect(curriculum.isAllowedEmbed(v)).toBe(true));
     });
   });
 
@@ -377,32 +379,47 @@ describe('the portal earns its price', () => {
  */
 describe('the video actually plays', () => {
   const PAGESRC = strip(PAGE);
+  const RAW = fs.readdirSync(curriculum.DATA_DIR).map((f) => fs.readFileSync(path.join(curriculum.DATA_DIR, f), 'utf8'));
 
-  it('never builds the embed YouTube withdrew', () => {
-    expect(PAGESRC).not.toContain('listType=search');
-    expect(PAGESRC).toContain('youtube-nocookie.com/embed/');
+  // "we didn't want to take the videos from YouTube"
+  it('no YouTube anywhere: not on the page, not in the course data', () => {
+    expect(PAGESRC).not.toMatch(/youtu\.?be/i);
+    RAW.forEach((raw) => {
+      expect(raw).not.toMatch(/youtu\.?be/i);
+      expect(raw).not.toMatch(/"videoId"|"videoSearch"/);
+    });
   });
 
-  it('a topic with no id of its own still gets videos from its own module', () => {
-    const pool = curriculum.videoPoolFor('devops-with-aws', 1);
-    expect(pool.length).toBeGreaterThan(1);
-    pool.forEach((id) => expect(id).toMatch(/^[A-Za-z0-9_-]{6,20}$/));
-    // Nearest first: topic 14's pool starts somewhere different from topic 1's.
-    expect(curriculum.videoPoolFor('devops-with-aws', 14)[0])
-      .not.toBe(curriculum.videoPoolFor('devops-with-aws', 1)[0]);
+  it('only open-library and non-YouTube players get through, over https', () => {
+    expect(curriculum.isAllowedEmbed('https://archive.org/embed/intro-to-java_202301')).toBe(true);
+    expect(curriculum.isAllowedEmbed('https://framatube.org/videos/embed/9c9de5e8-0a1e-484a-b099-e80766180a6d')).toBe(true);
+    expect(curriculum.isAllowedEmbed('https://www.dailymotion.com/embed/video/x8abc12')).toBe(true);
+    expect(curriculum.isAllowedEmbed('https://www.youtube.com/embed/rfscVS0vtbw')).toBe(false);
+    expect(curriculum.isAllowedEmbed('https://www.youtube-nocookie.com/embed/rfscVS0vtbw')).toBe(false);
+    expect(curriculum.isAllowedEmbed('https://youtu.be/rfscVS0vtbw')).toBe(false);
+    expect(curriculum.isAllowedEmbed('http://archive.org/embed/abc')).toBe(false);
+    expect(curriculum.isAllowedEmbed('javascript:alert(1)')).toBe(false);
   });
 
-  it('the route hands over the list, not one id', () => {
-    expect(ROUTE).toContain('videoIds: curriculum.videoPoolFor(mod.slug, n)');
+  it('the route hands over this topic\'s own videos, and nothing about where they live', () => {
+    expect(ROUTE).toContain('videos: curriculum.videosFor(mod.slug, n)');
+    expect(ROUTE).not.toContain('videoSearch');
   });
 
-  // "there should be a button that if any video is unavailable ... a related video"
-  it('offers another video, and a search when there is none to offer', () => {
-    expect(PAGESRC).toContain("id=\"vnext\"");
+  // "don't provide any link of the video"
+  it('the topic page links nowhere', () => {
+    const topic = PAGESRC.slice(PAGESRC.indexOf('async function topicScreen'), PAGESRC.indexOf('let proctor = null;'));
+    expect(topic).not.toContain('href=');
+    expect(topic).not.toContain('target="_blank"');
+  });
+
+  // "if the video is not working, a button to change the video"
+  it('a video that will not play is one press from the next', () => {
+    expect(PAGESRC).toContain('id="vnext"');
+    expect(PAGESRC).toContain('Change video');
     expect(PAGESRC).toContain('vidAt = (vidAt + 1) % vids.length;');
-    expect(PAGESRC).toContain('youtube.com/results?search_query=');
-    // A module with no ids at all stages no player it cannot fill.
-    expect(PAGESRC).toContain('No video is pinned to this topic yet');
+    // A topic with no video yet still opens its exam, from the reading.
+    expect(PAGESRC).toContain('There is no video for this topic yet');
   });
 });
 

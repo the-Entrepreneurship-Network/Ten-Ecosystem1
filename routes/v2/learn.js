@@ -400,15 +400,9 @@ router.get('/module/:slug/topic/:n', requireLearner(async (req, res, who) => {
         topic: {
             n, title: topic.title, difficulty: topic.difficulty,
             technical: topic.technical, simple: topic.simple,
-            /*
-             * A LIST, nearest-first, not a single id. Two thirds of the topics
-             * have no id of their own and the search-embed built for them is a
-             * form YouTube withdrew — it answered "Error 153" every time. The
-             * page plays the first that works and the learner can step to the
-             * next one.
-             */
-            videoIds: curriculum.videoPoolFor(mod.slug, n),
-            videoSearch: topic.videoSearch || (topic.title + ' ' + mod.name + ' tutorial')
+            // Embed urls only: the page shows the player and nothing that
+            // says where the video lives. See curriculum.isAllowedEmbed.
+            videos: curriculum.videosFor(mod.slug, n)
         },
         videoDoneAt: st && st.videoDoneAt,
         passedAt: st && st.passedAt,

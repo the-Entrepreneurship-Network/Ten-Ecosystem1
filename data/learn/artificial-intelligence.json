@@ -1,152 +1,441 @@
 {
- "note": "Edit this file to change the module; the server reads it at boot.",
- "topics": [
-  {
-   "title": "What AI is and is not",
-   "technical": "AI is software that performs tasks associated with intelligence — recognising, predicting, generating — almost always today via machine learning: functions fitted to data rather than rules written by hand. Knowing which problems suit learning, and which need none, is the field's first judgment call.",
-   "simple": "AI means programs that learn patterns from examples instead of following hand-written rules — powerful where rules are hard to write.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 1
-  },
-  {
-   "title": "Python for AI work",
-   "technical": "The AI stack is Python: NumPy arrays for vectorised math, pandas for tabular wrangling, matplotlib for looking at data, and Jupyter notebooks for the experiment-first workflow. Fluency here is the difference between doing ML and only reading about it.",
-   "simple": "The daily tools: fast arrays, smart tables, quick charts, and notebooks where code and results live together.",
-   "videoId": "rfscVS0vtbw",
-   "difficulty": 1
-  },
-  {
-   "title": "Data: the raw material",
-   "technical": "Models are compressed datasets, so data quality bounds model quality: collection introduces bias, labels carry noise, leakage smuggles the answer into the features, and the train/validation/test split is the firewall that keeps evaluation honest.",
-   "simple": "A model is only as good as its examples. Garbage in, garbage out — and never grade a student on questions they saw while studying.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 1
-  },
-  {
-   "title": "Supervised learning",
-   "technical": "Supervised learning fits a function from labelled pairs: regression predicts numbers, classification predicts categories. Loss functions score wrongness, optimisation reduces it, and generalisation — performance on unseen data — is the only score that matters.",
-   "simple": "Show the machine thousands of question-answer pairs and it learns to answer new questions of the same kind.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 1
-  },
-  {
-   "title": "Regression in practice",
-   "technical": "Linear regression fits weights minimising squared error — interpretable, fast, and the baseline every fancier model must beat. Feature scaling conditions the optimisation, regularisation (L1/L2) restrains overfitting, and residual plots show what the model missed.",
-   "simple": "Draw the best line through the points, read the slope as meaning, and always compare fancy models against this humble one.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 1
-  },
-  {
-   "title": "Classification and its metrics",
-   "technical": "Logistic regression, trees and forests assign classes; accuracy lies under class imbalance, so precision, recall, F1 and the confusion matrix tell the real story. The decision threshold trades false alarms against misses — a product decision wearing a math costume.",
-   "simple": "Sorting things into buckets — and measuring honestly, because 99% accuracy is trivial when 99% of cases are one bucket.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 2
-  },
-  {
-   "title": "Overfitting and validation",
-   "technical": "A model can memorise noise instead of learning signal: training error falls while validation error rises. Cross-validation estimates generalisation, early stopping and regularisation resist memorisation, and hyperparameters are tuned on validation — never test — data.",
-   "simple": "A student who memorises past papers fails new ones. Hold questions back to check for real understanding.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 2
-  },
-  {
-   "title": "Feature engineering",
-   "technical": "Features are the model's senses: encode categories, scale numerics, extract dates into cycles, cross variables that interact, and impute gaps deliberately. On tabular data, thoughtful features beat exotic architectures with dull regularity.",
-   "simple": "Preparing the inputs well — translating raw facts into signals — often matters more than the choice of algorithm.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 2
-  },
-  {
-   "title": "Trees, forests and boosting",
-   "technical": "Decision trees split greedily on features; random forests average many decorrelated trees; gradient boosting stacks small trees each fixing the last one's errors. Boosted trees remain the reigning champions of tabular ML — deep learning has not dethroned them there.",
-   "simple": "Many mediocre decision-makers, cleverly combined, outvote one brilliant one — the workhorse of real-world tabular AI.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 2
-  },
-  {
-   "title": "Unsupervised learning",
-   "technical": "Without labels, structure is the target: k-means clusters by distance, hierarchical methods build dendrograms, PCA projects to the directions of most variance, and anomaly detection flags what fits nothing. Exploration and compression, not prediction.",
-   "simple": "No answer key — the machine finds natural groupings and simplifications in the data by itself.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 3
-  },
-  {
-   "title": "Neural networks from the ground",
-   "technical": "A neural network layers linear transforms with nonlinear activations; backpropagation applies the chain rule to assign blame for the loss to every weight, and gradient descent nudges them all. Depth composes simple features into abstract ones — that composition is the power.",
-   "simple": "Layers of simple math units, each learning from its share of the blame for every mistake, together approximate almost anything.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 3
-  },
-  {
-   "title": "Training deep networks",
-   "technical": "Practical training is craft: batch sizes and learning-rate schedules, Adam as default optimiser, dropout and batch norm for stability, GPUs for the matrix math, and loss curves watched like vital signs. Most 'model problems' are training problems.",
-   "simple": "Teaching a deep network is an art of pacing: the right step size, the right regular breaks, and constant monitoring.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 3
-  },
-  {
-   "title": "Convolutional networks and vision",
-   "technical": "CNNs slide learned filters across images, sharing weights to exploit locality and translation invariance; pooling summarises, depth builds edges into textures into objects. Transfer learning from pretrained backbones makes small-data vision practical.",
-   "simple": "Vision models scan images with learned pattern-detectors — and you can borrow one pre-trained on millions of photos.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 3
-  },
-  {
-   "title": "Sequences and attention",
-   "technical": "Sequence models consume ordered data; attention lets every position weigh every other directly, and the Transformer built from it replaced recurrence entirely. Context windows, positional encoding and parallel training explain why this architecture ate the field.",
-   "simple": "Modern sequence AI reads everything at once and learns what to pay attention to — the design behind today's language models.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 4
-  },
-  {
-   "title": "Language models and embeddings",
-   "technical": "LLMs are Transformers trained to predict the next token at vast scale, acquiring grammar, knowledge and reasoning-like behaviour on the way. Embeddings map text to vectors where similarity is distance — the substrate of search, clustering and retrieval.",
-   "simple": "Predict-the-next-word, done at planetary scale, yields models that write and reason — and turn meaning into geometry.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 4
-  },
-  {
-   "title": "Using LLMs: prompting and RAG",
-   "technical": "Applied LLM work is context engineering: instructions and examples in the prompt, retrieval-augmented generation to ground answers in your documents, structured outputs for machines downstream, and temperature to trade creativity against reliability. Hallucination is managed, never assumed away.",
-   "simple": "You program these models in English: clear instructions, your own documents supplied as context, and healthy suspicion of confident nonsense.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 4
-  },
-  {
-   "title": "Evaluating AI systems",
-   "technical": "Evaluation is the discipline: task metrics on held-out data, human review where metrics blur, A/B tests for product impact, and error analysis that reads the failures one by one. A model without an evaluation harness is a rumour, not a system.",
-   "simple": "Measure before believing: held-back tests, human spot-checks, and reading the actual mistakes.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 4
-  },
-  {
-   "title": "MLOps: models in production",
-   "technical": "Production ML versions data, code and models together; serves behind APIs with monitoring for drift; retrains on schedule or trigger; and keeps rollback one action away. The model is 10% of the system — the pipelines around it are the engineering.",
-   "simple": "A model in a notebook is a demo. Production means serving, watching for decay, retraining and being able to undo.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 5
-  },
-  {
-   "title": "Ethics, bias and safety",
-   "technical": "Models inherit their data's biases and amplify them at scale; fairness metrics conflict with each other, privacy constrains collection, and high-stakes uses demand explanation and human override. These are engineering requirements with legal teeth, not appendix material.",
-   "simple": "AI repeats the patterns it was fed — including unfair ones — so checking who it fails is part of building it.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 5
-  },
-  {
-   "title": "Reading the field",
-   "technical": "AI moves through papers and preprints: read abstracts ruthlessly, reproduce what matters, follow benchmarks skeptically (they saturate and leak), and distinguish capability announcements from deployed reality. The skill of updating beats any snapshot of knowledge.",
-   "simple": "The field changes monthly; the durable skill is reading claims critically and testing them yourself.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 5
-  },
-  {
-   "title": "The capstone",
-   "technical": "Take one dataset to production: frame the task, baseline simply, iterate with honest validation, then serve the best model behind an API with monitoring and a write-up of what worked and failed. Judgment shown end to end is the hireable artifact.",
-   "simple": "One complete journey — data to deployed, evaluated model — with your reasoning written down.",
-   "videoId": "i_LwzRVP7bg",
-   "difficulty": 5
-  }
- ]
+  "note": "Edit this file to change the module; the server reads it at boot.",
+  "topics": [
+    {
+      "title": "What AI is and is not",
+      "technical": "AI is software that performs tasks associated with intelligence — recognising, predicting, generating — almost always today via machine learning: functions fitted to data rather than rules written by hand. Knowing which problems suit learning, and which need none, is the field's first judgment call.",
+      "simple": "AI means programs that learn patterns from examples instead of following hand-written rules — powerful where rules are hard to write.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/artificial_intelligence",
+          "title": "Introduction to A.I.: Artificial Intelligence (six-minutes video) - Meaning and conceptions, the Turing test, practical applications of AI techniques",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xafzxty",
+          "title": "What Is Artificial Intelligence, Really?",
+          "minutes": 10
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9m8ph0",
+          "title": "What is Artificial Intelligence - AI For Everyone",
+          "minutes": 12
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9kjlw8",
+          "title": "Day 01: What Is AI? Artificial Intelligence for Beginners",
+          "minutes": 9
+        }
+      ]
+    },
+    {
+      "title": "Python for AI work",
+      "technical": "The AI stack is Python: NumPy arrays for vectorised math, pandas for tabular wrangling, matplotlib for looking at data, and Jupyter notebooks for the experiment-first workflow. Fluency here is the difference between doing ML and only reading about it.",
+      "simple": "The daily tools: fast arrays, smart tables, quick charts, and notebooks where code and results live together.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9ov3mc",
+          "title": "Day 39 Fast: NumPy for Numerical Computing – Beginner’s Guide for AI Coding | #DailyAIWizard",
+          "minutes": 4
+        }
+      ]
+    },
+    {
+      "title": "Data: the raw material",
+      "technical": "Models are compressed datasets, so data quality bounds model quality: collection introduces bias, labels carry noise, leakage smuggles the answer into the features, and the train/validation/test split is the firewall that keeps evaluation honest.",
+      "simple": "A model is only as good as its examples. Garbage in, garbage out — and never grade a student on questions they saw while studying.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9q1gh4",
+          "title": "Day 47: Data Preprocessing in scikit-learn",
+          "minutes": 15
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.osgeo.org/videos/embed/aEqqPFKAXuD3zAa7Cdai7B",
+          "title": "FOSS4G 2021 - Curating machine learning datasets in international collaborations",
+          "minutes": 20
+        }
+      ]
+    },
+    {
+      "title": "Supervised learning",
+      "technical": "Supervised learning fits a function from labelled pairs: regression predicts numbers, classification predicts categories. Loss functions score wrongness, optimisation reduces it, and generalisation — performance on unseen data — is the only score that matters.",
+      "simple": "Show the machine thousands of question-answer pairs and it learns to answer new questions of the same kind.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8rvgyj",
+          "title": "Session 11 : What is Classification Task in Supervised machine Learning | Beginner-Friendly ML",
+          "minutes": 6
+        }
+      ]
+    },
+    {
+      "title": "Regression in practice",
+      "technical": "Linear regression fits weights minimising squared error — interpretable, fast, and the baseline every fancier model must beat. Feature scaling conditions the optimisation, regularisation (L1/L2) restrains overfitting, and residual plots show what the model missed.",
+      "simple": "Draw the best line through the points, read the slope as meaning, and always compare fancy models against this humble one.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9s9b9w",
+          "title": "Day 61: Your First Machine Learning Model: Linear Regression",
+          "minutes": 26
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9s9b9s",
+          "title": "Day 62: Evaluating a Linear Regression Model",
+          "minutes": 25
+        }
+      ]
+    },
+    {
+      "title": "Classification and its metrics",
+      "technical": "Logistic regression, trees and forests assign classes; accuracy lies under class imbalance, so precision, recall, F1 and the confusion matrix tell the real story. The decision threshold trades false alarms against misses — a product decision wearing a math costume.",
+      "simple": "Sorting things into buckets — and measuring honestly, because 99% accuracy is trivial when 99% of cases are one bucket.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9r524u",
+          "title": "Day 49: Model Evaluation: Accuracy and Other Metrics",
+          "minutes": 19
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8rvgyj",
+          "title": "Session 11 : What is Classification Task in Supervised machine Learning | Beginner-Friendly ML",
+          "minutes": 6
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2018_Qwdr9ETH",
+          "title": "[EuroPython 2018] Obiamaka Agbaneje - Building a Naive Bayes Text Classifier with scikit learn",
+          "minutes": 30
+        }
+      ]
+    },
+    {
+      "title": "Overfitting and validation",
+      "technical": "A model can memorise noise instead of learning signal: training error falls while validation error rises. Cross-validation estimates generalisation, early stopping and regularisation resist memorisation, and hyperparameters are tuned on validation — never test — data.",
+      "simple": "A student who memorises past papers fails new ones. Hold questions back to check for real understanding.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9ts7sw",
+          "title": "Day 70: Cross-Validation for Machine Learning",
+          "minutes": 23
+        }
+      ]
+    },
+    {
+      "title": "Feature engineering",
+      "technical": "Features are the model's senses: encode categories, scale numerics, extract dates into cycles, cross variables that interact, and impute gaps deliberately. On tabular data, thoughtful features beat exotic architectures with dull regularity.",
+      "simple": "Preparing the inputs well — translating raw facts into signals — often matters more than the choice of algorithm.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/pyohio_2019-Feature_Engineering_An_Apprentices_Guide_to_the_Dark_Art_of_Machine_Learning",
+          "title": "Feature Engineering: An Apprentice's Guide to the \"Dark Art” of Machine Learning",
+          "minutes": 45
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2018_J1HA2xMG",
+          "title": "[EuroPython 2018] Pietro Mascolo - Good features beat algorithms",
+          "minutes": 36
+        }
+      ]
+    },
+    {
+      "title": "Trees, forests and boosting",
+      "technical": "Decision trees split greedily on features; random forests average many decorrelated trees; gradient boosting stacks small trees each fixing the last one's errors. Boosted trees remain the reigning champions of tabular ML — deep learning has not dethroned them there.",
+      "simple": "Many mediocre decision-makers, cleverly combined, outvote one brilliant one — the workhorse of real-world tabular AI.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2018_p0XmtCNV",
+          "title": "[EuroPython 2018] Kevin Lemagnen - Walking the Random Forest and boosting the trees",
+          "minutes": 24
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2019_ChLE0jbg",
+          "title": "[EuroPython 2019] Olivier Grisel - Histogram-based Gradient Boosting in scikit-learn 0.21",
+          "minutes": 45
+        }
+      ]
+    },
+    {
+      "title": "Unsupervised learning",
+      "technical": "Without labels, structure is the target: k-means clusters by distance, hierarchical methods build dendrograms, PCA projects to the directions of most variance, and anomaly detection flags what fits nothing. Exploration and compression, not prediction.",
+      "simple": "No answer key — the machine finds natural groupings and simplifications in the data by itself.",
+      "difficulty": 3,
+      "videos": []
+    },
+    {
+      "title": "Neural networks from the ground",
+      "technical": "A neural network layers linear transforms with nonlinear activations; backpropagation applies the chain rule to assign blame for the loss to every weight, and gradient descent nudges them all. Depth composes simple features into abstract ones — that composition is the power.",
+      "simple": "Layers of simple math units, each learning from its share of the blame for every mistake, together approximate almost anything.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://tube.polytech-reseau.org/videos/embed/uygWVk8CFRkVqsh1DcBy9G",
+          "title": "Neural networks",
+          "minutes": 9
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x96ac8a",
+          "title": "Deep Learning Fundamentals Explained Neural Networks, Machine Learning vs. Deep Learning, & Real-World Applications",
+          "minutes": 12
+        }
+      ]
+    },
+    {
+      "title": "Training deep networks",
+      "technical": "Practical training is craft: batch sizes and learning-rate schedules, Adam as default optimiser, dropout and batch norm for stability, GPUs for the matrix math, and loss curves watched like vital signs. Most 'model problems' are training problems.",
+      "simple": "Teaching a deep network is an art of pacing: the right step size, the right regular breaks, and constant monitoring.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7tzpkq",
+          "title": "Gradient descent, how neural networks learn | Deep learning, chapter 2",
+          "minutes": 21
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7tywv6",
+          "title": "What is backpropagation really doing? | Deep learning, chapter 3",
+          "minutes": 14
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9u6kv8",
+          "title": "Day 76: Optimizers for Training Neural Networks",
+          "minutes": 15
+        }
+      ]
+    },
+    {
+      "title": "Convolutional networks and vision",
+      "technical": "CNNs slide learned filters across images, sharing weights to exploit locality and translation invariance; pooling summarises, depth builds edges into textures into objects. Transfer learning from pretrained backbones makes small-data vision practical.",
+      "simple": "Vision models scan images with learned pattern-detectors — and you can borrow one pre-trained on millions of photos.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/pyohio_2019-Deep_Learning_Like_a_Viking_Building_Convolutional_Neural_Networks_with_Keras",
+          "title": "Deep Learning Like a Viking: Building Convolutional Neural Networks with Keras",
+          "minutes": 44
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/pyconza2017-Getting_more_out_of_your_pandas",
+          "title": "Deep Learning for Computer Vision",
+          "minutes": 44
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9mn0ti",
+          "title": "Day 17: Convolutional Neural Networks for Image Recognition",
+          "minutes": 14
+        }
+      ]
+    },
+    {
+      "title": "Sequences and attention",
+      "technical": "Sequence models consume ordered data; attention lets every position weigh every other directly, and the Transformer built from it replaced recurrence entirely. Context windows, positional encoding and parallel training explain why this architecture ate the field.",
+      "simple": "Modern sequence AI reads everything at once and learns what to pay attention to — the design behind today's language models.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9mn0te",
+          "title": "Day 18: Recurrent Neural Networks for Sequence Data",
+          "minutes": 16
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2018_SAktvLCb",
+          "title": "[EuroPython 2018] Heidi Thorpe - May the Fuzz be with you",
+          "minutes": 25
+        }
+      ]
+    },
+    {
+      "title": "Language models and embeddings",
+      "technical": "LLMs are Transformers trained to predict the next token at vast scale, acquiring grammar, knowledge and reasoning-like behaviour on the way. Embeddings map text to vectors where similarity is distance — the substrate of search, clustering and retrieval.",
+      "simple": "Predict-the-next-word, done at planetary scale, yields models that write and reason — and turn meaning into geometry.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://videos.spacebar.ca/videos/embed/2YM1yXHGu7zsCS9MvDEKvu",
+          "title": "NSEC2023 - Empowering Security with Generative AI: Fundamentals and Applications of GPT models",
+          "minutes": 44
+        },
+        {
+          "src": "pt",
+          "embed": "https://tube.kockatoo.org/videos/embed/4P23PF9Tizzwbis6gt3puB",
+          "title": "David Schlangen - Towards a Pragmatic Understanding of Large Language Models",
+          "minutes": 51
+        },
+        {
+          "src": "pt",
+          "embed": "https://peertube.watch/videos/embed/h9yPXEA3G22bosurrG9SPM",
+          "title": "Building Open Source Language Models",
+          "minutes": 12
+        }
+      ]
+    },
+    {
+      "title": "Using LLMs: prompting and RAG",
+      "technical": "Applied LLM work is context engineering: instructions and examples in the prompt, retrieval-augmented generation to ground answers in your documents, structured outputs for machines downstream, and temperature to trade creativity against reliability. Hallucination is managed, never assumed away.",
+      "simple": "You program these models in English: clear instructions, your own documents supplied as context, and healthy suspicion of confident nonsense.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://peertube.watch/videos/embed/obGUCbwLCSGM5Q2AX4zRYf",
+          "title": "How to Use Private Data in Generative AI: End-to-End Solution for Retrieval Augmented Generation with CrateDB and…",
+          "minutes": 26
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9jr7gk",
+          "title": "AI-900 LAB: Retrieval-Augmented Generation (RAG) with Azure AI Foundry Part - 1",
+          "minutes": 24
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9jjl52",
+          "title": "AI-900 LAB: Mastering Prompt Engineering Techniques with Azure AI",
+          "minutes": 19
+        }
+      ]
+    },
+    {
+      "title": "Evaluating AI systems",
+      "technical": "Evaluation is the discipline: task metrics on held-out data, human review where metrics blur, A/B tests for product impact, and error analysis that reads the failures one by one. A model without an evaluation harness is a rumour, not a system.",
+      "simple": "Measure before believing: held-back tests, human spot-checks, and reading the actual mistakes.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9r524u",
+          "title": "Day 49: Model Evaluation: Accuracy and Other Metrics",
+          "minutes": 19
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/pyconza2024-monitoring-and-evaluating-llm-apps-with-langfuse",
+          "title": "Monitoring and Evaluating LLM Apps with Langfuse",
+          "minutes": 33
+        }
+      ]
+    },
+    {
+      "title": "MLOps: models in production",
+      "technical": "Production ML versions data, code and models together; serves behind APIs with monitoring for drift; retrains on schedule or trigger; and keeps rollback one action away. The model is 10% of the system — the pipelines around it are the engineering.",
+      "simple": "A model in a notebook is a demo. Production means serving, watching for decay, retraining and being able to undo.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2020_7iLPcmpD",
+          "title": "[EuroPython 2020] Chase Stevens - Painless Machine Learning in Production",
+          "minutes": 43
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/pyconza2019-getting-machine-learning-models-ready-for-production-using-python",
+          "title": "Getting Machine Learning Models Ready For Production Using Python",
+          "minutes": 35
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2017_M7YzfHbI",
+          "title": "[EuroPython 2017] Sahil Dua - How Booking.com serves Deep Learning model predictions",
+          "minutes": 31
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2020_pDOrzh3S",
+          "title": "[EuroPython 2020] Shreya Khurana - Train. Serve. Deploy! Story of a NLP Model ft. PyTorch, Docker, Uwsgi and Nginx",
+          "minutes": 30
+        }
+      ]
+    },
+    {
+      "title": "Ethics, bias and safety",
+      "technical": "Models inherit their data's biases and amplify them at scale; fairness metrics conflict with each other, privacy constrains collection, and high-stakes uses demand explanation and human override. These are engineering requirements with legal teeth, not appendix material.",
+      "simple": "AI repeats the patterns it was fed — including unfair ones — so checking who it fails is part of building it.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9n7ui2",
+          "title": "Day 21: AI Ethics: Building Responsible AI",
+          "minutes": 20
+        },
+        {
+          "src": "pt",
+          "embed": "https://videos.devteams.at/videos/embed/xhhjdKiBwgi4JhtNj6cTCf",
+          "title": "Ethics of AI in Software Development",
+          "minutes": 8
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6vr25f",
+          "title": "AI bias is a new face of an old problem",
+          "minutes": 5
+        }
+      ]
+    },
+    {
+      "title": "Reading the field",
+      "technical": "AI moves through papers and preprints: read abstracts ruthlessly, reproduce what matters, follow benchmarks skeptically (they saturate and leak), and distinguish capability announcements from deployed reality. The skill of updating beats any snapshot of knowledge.",
+      "simple": "The field changes monthly; the durable skill is reading claims critically and testing them yourself.",
+      "difficulty": 5,
+      "videos": []
+    },
+    {
+      "title": "The capstone",
+      "technical": "Take one dataset to production: frame the task, baseline simply, iterate with honest validation, then serve the best model behind an API with monitoring and a write-up of what worked and failed. Judgment shown end to end is the hireable artifact.",
+      "simple": "One complete journey — data to deployed, evaluated model — with your reasoning written down.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9ts7su",
+          "title": "Day 71: Machine Learning Project: Predicting House Prices",
+          "minutes": 23
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9ts7t0",
+          "title": "Day 72: Machine Learning Project: Classifying Iris Flowers",
+          "minutes": 24
+        }
+      ]
+    }
+  ]
 }
