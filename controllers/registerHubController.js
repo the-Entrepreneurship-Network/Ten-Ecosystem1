@@ -24,6 +24,21 @@ const StartupProfile      = require('../models/StartupProfile');
 const CommunityProfile    = require('../models/CommunityProfile');
 
 const MailHistory   = require('../models/MailHistory');
+
+/*
+ * A profile headline made from what the person typed at sign-up: degree and
+ * college, designation and company, or a skill. Both profiles allow 120
+ * characters, and a longer one failed the whole sign-up: a long degree and
+ * college typed under "Other" could not register at all (27 Nov, nine tries by
+ * one student). Cut at a word, with an ellipsis; they can edit it later.
+ */
+function headlineOf(text, max = 120) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max - 1);
+  const space = cut.lastIndexOf(' ');
+  return (space > max / 2 ? cut.slice(0, space) : cut).trim() + '…';
+}
 const {
   createEmailTransporter, mailerReady, isSendableAddress,
   renderEmail, escapeHtml, PORTAL_URL, EMAIL_FROM
@@ -695,7 +710,7 @@ async function registerUser(req, res) {
       // Automatically create Talent Profile for students
       await TalentProfile.create({
         userId: user._id,
-        headline: `${roleSpecificData.degree} Student at ${roleSpecificData.university}`,
+        headline: headlineOf(`${roleSpecificData.degree} Student at ${roleSpecificData.university}`),
         skills: roleSpecificData.skills ? roleSpecificData.skills.split(',').map(s => ({ name: s.trim(), level: 'intermediate' })).filter(x => x.name) : [],
         socialLinks: {
           linkedin: roleSpecificData.linkedin || "",
@@ -793,7 +808,7 @@ async function registerUser(req, res) {
       await MentorProfile.create({
         userId: user._id,
         memberId: genMemberId,
-        headline: `${roleSpecificData.designation} at ${roleSpecificData.company}`,
+        headline: headlineOf(`${roleSpecificData.designation} at ${roleSpecificData.company}`),
         linkedinUrl: roleSpecificData.linkedin || "",
         verificationStatus: 'pending'
       });
@@ -801,7 +816,7 @@ async function registerUser(req, res) {
       // Automatically create Talent Profile for mentors
       await TalentProfile.create({
         userId: user._id,
-        headline: `${roleSpecificData.designation} at ${roleSpecificData.company}`,
+        headline: headlineOf(`${roleSpecificData.designation} at ${roleSpecificData.company}`),
         skills: roleSpecificData.expertiseAreas ? roleSpecificData.expertiseAreas.split(',').map(s => ({ name: s.trim(), level: 'expert' })).filter(x => x.name) : [],
         socialLinks: {
           linkedin: roleSpecificData.linkedin || "",
@@ -896,7 +911,7 @@ async function registerUser(req, res) {
       // Automatically create Talent Profile for contractors
       await TalentProfile.create({
         userId: user._id,
-        headline: `Independent Contractor - ${roleSpecificData.skills ? roleSpecificData.skills.split(',')[0] : 'Freelancer'}`,
+        headline: headlineOf(`Independent Contractor - ${roleSpecificData.skills ? roleSpecificData.skills.split(',')[0] : 'Freelancer'}`),
         skills: roleSpecificData.skills ? roleSpecificData.skills.split(',').map(s => ({ name: s.trim(), level: 'advanced' })).filter(x => x.name) : [],
         socialLinks: {
           linkedin: "",
@@ -995,5 +1010,5 @@ async function removeHalfMadeAccount(userId, studentId) {
   await EcosystemUser.deleteOne({ _id: userId });
 }
 
-module.exports = { getHub, getRoleConfig, registerUser, sendRegistrationWelcome, sendPartnerDecision };
+module.exports = { getHub, getRoleConfig, registerUser, sendRegistrationWelcome, sendPartnerDecision, _internal: { headlineOf } };
 
