@@ -591,99 +591,71 @@ router.post('/verify-payment', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// 5. POST /api/v2/marketplace/dev-add-coins — Dev Testing Helper
+// 5. POST /api/v2/marketplace/dev-add-coins — the 250-coin welcome bonus
 // ─────────────────────────────────────────────────────────────
+//
+// The path is a leftover of the testing helper this used to be; the
+// marketplace's "Claim 250 Welcome Bonus Coins (1-Time Claim)" button calls
+// it, so it keeps the name. What changed is who may claim and how often.
+//
+// It used to add 250 coins on every call, for whichever student
+// _getStudentFromReq settled on: an employee ID typed into a header, or, with
+// nothing sent at all, the most recently updated student. "1-Time" lived only
+// in the browser's localStorage. Coins spend as money in this marketplace
+// (100 coins = ₹50), so that was money for anyone who asked.
+//
+// Now the claimant is the signed-in student, from the session alone, and the
+// bonus is granted once: the history entry it writes is what marks it
+// claimed. The button's fetch ignores the reply, so a refusal changes nothing
+// on screen.
+//
+// ponytail: read-then-save, like the rest of this file. Two simultaneous
+// claims from one signed-in student could both pass the check; that is a
+// bounded 250, against the unbounded grant this replaces. An atomic
+// conditional update is the upgrade if it ever matters.
+const WELCOME_COINS = 250;
+const WELCOME_ACTION = "Claimed Welcome / Dev Test Coins";   // matches the rows already written
+
 router.post('/dev-add-coins', async (req, res) => {
     try {
-        const student = await _getStudentFromReq(req);
-        if (student) {
-            const StudentCoin = require('../../models/new/StudentCoin');
-            let coinDoc = await StudentCoin.findOne({ studentId: student._id });
-            if (!coinDoc) {
-                coinDoc = new StudentCoin({ studentId: student._id });
-            }
-            coinDoc.totalCoins = (coinDoc.totalCoins || 0) + 250;
-            coinDoc.coinsHistory.push({
-                action: "Claimed Welcome / Dev Test Coins",
-                coins: 250,
-                timestamp: new Date()
-            });
-            await coinDoc.save();
+        const student = await findSessionStudent(req);
+        if (!student) {
+            return res.status(401).json({ success: false, message: "Please sign in to claim the welcome bonus." });
         }
-        return res.json({
-            success: true,
-            message: "🎉 Success! Added 250 test coins to your account!",
-            studentCoins: 250
-        });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
-});
-
-// ─────────────────────────────────────────────────────────────
-// 5.5 POST /api/v2/marketplace/dev-reset-certs — Dev Testing Helper to Reset Certificate Claims
-// ─────────────────────────────────────────────────────────────
-router.post('/dev-reset-certs', async (req, res) => {
-    try {
-        const student = await _getStudentFromReq(req);
-        if (student && student.employeeId) {
-            await CoinRedemption.deleteMany({
-                employeeId: student.employeeId,
-                itemType: 'certificate'
-            });
+        const StudentCoin = require('../../models/new/StudentCoin');
+        let coinDoc = await StudentCoin.findOne({ studentId: student._id });
+        if (!coinDoc) {
+            coinDoc = new StudentCoin({ studentId: student._id });
         }
+        if ((coinDoc.coinsHistory || []).some((h) => h && h.action === WELCOME_ACTION)) {
+            return res.status(409).json({ success: false, message: "The welcome bonus has already been claimed." });
+        }
+        coinDoc.totalCoins = (coinDoc.totalCoins || 0) + WELCOME_COINS;
+        coinDoc.coinsHistory.push({
+            action: WELCOME_ACTION,
+            coins: WELCOME_COINS,
+            timestamp: new Date()
+        });
+        await coinDoc.save();
         return res.json({
             success: true,
-            message: "🎉 Success! Reset all certificate redemptions. You can now redeem them again!"
+            message: "🎉 Added your 250 welcome bonus coins!",
+            studentCoins: WELCOME_COINS
         });
     } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
+        console.error("[Marketplace] welcome bonus failed:", err.message);
+        return res.status(500).json({ success: false, message: "Could not add the welcome bonus." });
     }
 });
 
-// ─────────────────────────────────────────────────────────────
-// 5.6 POST /api/v2/marketplace/dev-reset-flow — Clear All Payment, Booking, and Notification Data for Retro Testing
-// ─────────────────────────────────────────────────────────────
-router.post('/dev-reset-flow', async (req, res) => {
-    try {
-        await CoinRedemption.deleteMany({});
-        
-        try {
-            const EcosystemNotification = require('../../models/EcosystemNotification');
-            if (EcosystemNotification) {
-                await EcosystemNotification.deleteMany({});
-            }
-        } catch (_) {}
-
-        try {
-            const Payment = require('../../models/Payment');
-            if (Payment) {
-                await Payment.deleteMany({});
-            }
-        } catch (_) {}
-
-        try {
-            const PaymentTransaction = require('../../models/PaymentTransaction');
-            if (PaymentTransaction) {
-                await PaymentTransaction.deleteMany({});
-            }
-        } catch (_) {}
-
-        try {
-            const Student = require('../../models/Student');
-            if (Student) {
-                await Student.updateMany({}, { coins: 250 });
-            }
-        } catch (_) {}
-
-        return res.json({
-            success: true,
-            message: "🎉 System flow data has been completely cleared. Student coins reset to 250."
-        });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
-});
+/*
+ * Two testing helpers lived here, and are gone on purpose: one wiped a
+ * student's certificate redemptions, the other wiped every payment,
+ * redemption and notification in the database and reset every student's
+ * coins. Neither checked who was asking, and no page used either. A reset
+ * belongs in a script run against a test database, never in a route a
+ * production server answers.
+ */
 
 // ─────────────────────────────────────────────────────────────
 // 6. GET /api/v2/coordinator/mentorship-bookings — List Paid Mentorship Sessions for Coordinator
@@ -857,17 +829,9 @@ router.get('/mentor/profile', async (req, res) => {
     }
 });
 
-router.get('/test/debug-mentors', async (req, res) => {
-    try {
-        const EcosystemUser = require('../../models/EcosystemUser');
-        const MentorProfile = require('../../models/MentorProfile');
-        const users = await EcosystemUser.find({ role: 'mentor' }).lean();
-        const profiles = await MentorProfile.find({}).lean();
-        return res.json({ success: true, users, profiles });
-    } catch (e) {
-        return res.json({ success: false, error: e.message });
-    }
-});
+// A debugging listing of every mentor account and profile, whole, used to
+// stand here with no sign-in check. Gone: nothing called it, and an account
+// record is not something to hand to whoever asks.
 
 // ─────────────────────────────────────────────────────────────
 // 8. POST /api/v2/marketplace/redeem-booster — Instant Coins Debit & Booster Unlock
