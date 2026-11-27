@@ -962,16 +962,52 @@ the dashboard entries.
   why. It is also sent when a backlog run ends. Without the
   help desk mailbox it is only written to the log.
 - **Records:** `AiCoordinatorLog`, kept 120 days: answers, hand-overs (with
-  the question), pre-checks, reviews, reminders and summaries.
+  the question), pre-checks, reviews, certificate approvals, Interview Room
+  turns and reports, reminders and summaries.
 
----
+### 7.15 Interview Room (fortnightly, on camera, free)
 
-## 8. Data model
+`/meeting` (`public/meeting.html`, `routes/v2/meeting.js`,
+`services/aiMeeting.js`, `models/MeetingSession.js`), opened from the
+dashboard menu and a card. The AI Coordinator interviews the student by voice
+(Chrome's speech recognition and the device's own voices, in the browser;
+typing is the fallback), so the server only passes text and it costs nothing.
+`AI_COORDINATOR=off` switches the room off with the rest.
 
-MongoDB, through Mongoose 6. **Mongoose strict mode silently drops any field
-the schema does not declare**, both in writes and in query filters. Most
-surprising bugs in this codebase come from that, so when you write a new
-field, declare it in the schema first.
+- **When:** every second Sunday (IST) from `ANCHOR` (29 Nov 2026), one
+  interview per student per opening; an unfinished one resumes the same day.
+  Outside the opening the page shows the next date and the API answers 403.
+  `INTERVIEW_OPEN=always` opens it every day, for a trial; unset it after.
+- **Questions:** eight, written by Gemini from the topics of every task the
+  student has had so far (`TaskAssignment`, the Task Journey's `DomainTask`
+  rows the student has unlocked, submitted work), at company-interview level:
+  the ideas, trade-offs and debugging behind the tasks, never the task text;
+  a weak answer gets a follow-up. Each answer is scored 0–10, strictly, with
+  two sentences of feedback. Answers are stored scrubbed, so a phone number
+  said aloud never reaches Gemini. Gemini turns are capped at 20 per student
+  per day.
+- **Camera:** required. The page runs MediaPipe's face landmarker from a CDN
+  in the browser (about 10 MB, once) and judges, four times a second, whether
+  one face is in frame with its eyes on the camera (head yaw and pitch, iris
+  position); it waits for a face before the first question, pauses answering
+  while the camera is off, and sends the running totals with each answer. The
+  video never leaves the browser. The totals are client-reported; a cheat with
+  the developer tools could zero them, and checking the video on the server
+  would cost money. If the model cannot load, the camera is still required and
+  the report says the check was unavailable.
+- **Report:** marks per question and overall, strengths, gaps and what to
+  work on before the next interview, plus the camera line. Saved on the
+  session, listed on the page, emailed to the student
+  (`utils/mailer.renderEmail`), and logged (`AiCoordinatorLog` kind
+  `meeting`, source `report`) so the daily report's item 7 lists the day's
+  interviews with their marks. "End the interview" early reports what was
+  answered, without an AI call.
+- **Payment:** none yet, by the owner's decision; the room sits in the student
+  portal and a fee can be added later. No payment gateway (standing rule).
+- Not built, by choice: a coordinator view of the marks (the daily report and
+  the database have them), snapshots of the student's face, server-side video
+  checking, and Kokoro (an in-browser neural voice, about 90 MB) if the device
+  voices are judged unclear.
 
 ### 8.1 The collections that matter most
 

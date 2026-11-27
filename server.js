@@ -3511,6 +3511,8 @@ app.get("/student-dashboard", (req,res)=>{ res.sendFile(path.join(__dirname,"pub
 // Direct messages, for every role. The page derives identity from the
 // session, so one URL serves students, coordinators, HR and admin.
 app.get("/messages",          (req,res)=>{ res.sendFile(path.join(__dirname,"public","messages.html")); });
+// The AI Meeting Room: services/aiMeeting.js, routes/v2/meeting.js.
+app.get("/meeting",           (req,res)=>{ res.sendFile(path.join(__dirname,"public","meeting.html")); });
 app.get("/notifications",     (req,res)=>{ res.sendFile(path.join(__dirname,"public","notifications.html")); });
 
 app.get("/mentor-dashboard",  (req,res)=>{ res.sendFile(path.join(__dirname,"public","mentor-dashboard.html")); });
@@ -10992,6 +10994,7 @@ try {
 // (services/aiCoordinator*.js, services/submissionPrecheck.js).
 try {
     app.use('/api/v2/ai-coordinator', require('./routes/v2/aiCoordinator'));
+    app.use('/api/v2/meeting', require('./routes/v2/meeting'));
     console.log('[V2] AI Coordinator routes mounted at /api/v2/ai-coordinator');
 } catch(e) {
     console.error('[V2] Failed to mount AI Coordinator routes:', e.message);
