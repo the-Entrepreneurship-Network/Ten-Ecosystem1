@@ -146,18 +146,20 @@ function profileFromResume(text) {
   const raw = String(text || '');
   const low = raw.toLowerCase();
 
-  const skills = SKILL_VOCAB.filter((s) => low.includes(s));
+  /* Whole words. Substrings read "JavaScript" as Java, "Excellent" as Excel,
+     "digital" as git and "inside" as SDE. */
+  const skills = SKILL_VOCAB.filter((s) => hasWord(low, s));
+  const head = raw.split(/\r?\n/).slice(0, 6).join('\n').toLowerCase();
 
   let role = '';
   let best = 0;
   for (const [title, hints] of TITLE_HINTS) {
-    const hits = hints.filter((h) => low.includes(h)).length;
+    const hits = hints.filter((h) => hasWord(low, h)).length;
     if (hits > best) { best = hits; role = title; }
   }
   if (!role) {
     /* fall back to a title line near the top — most resumes put it under the name */
-    const head = raw.split(/\r?\n/).slice(0, 6).join(' ').toLowerCase();
-    const guess = TITLE_HINTS.find(([, hints]) => hints.some((h) => head.includes(h)));
+    const guess = TITLE_HINTS.find(([, hints]) => hints.some((h) => hasWord(head, h)));
     /* Then what the skills themselves say, and only then a default — an
        unrecognised resume is not automatically a software engineer. */
     role = guess ? guess[0]
@@ -165,8 +167,19 @@ function profileFromResume(text) {
       || (skills.includes('react') || skills.includes('node') ? 'full stack developer' : 'software engineer');
   }
 
-  let seniority = 'entry';
-  for (const [level, hints] of SENIORITY) if (hints.some((h) => low.includes(h))) seniority = level;
+  /*
+   * What the page says the person IS, not any word in it. The last level to
+   * match anywhere used to win, so "showed leadership" made a fresher senior.
+   * The title (top three lines) or real work years decide; an internship counts only for
+   * someone with no years of work.
+   */
+  const years = yearsOfExperience(raw);
+  const title = raw.split(/\r?\n/).slice(0, 3).join('\n').toLowerCase();
+  const says = (level, text) => SENIORITY.find(([l]) => l === level)[1].some((h) => hasWord(text, h));
+  const seniority = says('senior', title) || years >= 5 ? 'senior'
+    : says('mid', title) || years >= 3 ? 'mid'
+    : says('intern', title) || (!years && says('intern', low)) ? 'intern'
+    : 'entry';
 
   const location = INDIAN_CITIES.find((c) => low.includes(c)) || 'remote';
   /* \s matches newlines, so the original anchor ran past the end of the line
@@ -176,7 +189,6 @@ function profileFromResume(text) {
   /* Fitness scoring needs more than skills: years, what was built, and
      whether there is a degree. All read from the same text, all optional —
      a resume that omits them simply scores on the dimensions it does show. */
-  const years = yearsOfExperience(raw);
   const projects = projectLines(raw);
   const education = /\b(b\.?tech|b\.?e\.?|bachelor|master|m\.?tech|mba|b\.?sc|m\.?sc|diploma)\b/i.test(low)
     ? (raw.match(/^.*\b(?:b\.?tech|b\.?e\.?|bachelor|master|m\.?tech|mba|b\.?sc|m\.?sc)\b.*$/im) || [])[0] || true
@@ -203,14 +215,30 @@ function yearsOfExperience(text) {
   const stated = low.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:years|yrs)\s*(?:of\s*)?(?:experience|exp)/);
   if (stated) return Math.round(parseFloat(stated[1]));
 
-  const years = (low.match(/\b(19[89]\d|20[0-4]\d)\b/g) || []).map(Number)
-    .filter((y) => y >= 1990 && y <= new Date().getFullYear());
-  if (years.length) {
-    const span = new Date().getFullYear() - Math.min(...years);
-    /* Graduation years would otherwise read as decades of work. */
-    return span > 0 && span < 40 ? span : null;
+  /*
+   * Work date ranges only. Every year on the page used to count from the
+   * earliest one, so "B.Tech, 2021 - 2025" was five years of experience and a
+   * final-year student met "3+ years" requirements. Lines under an education
+   * heading, or naming a degree or school, are not work.
+   */
+  const now = new Date().getFullYear();
+  const SCHOOL = /\b(b\.?\s?tech|b\.?e\.?|bachelor|master|m\.?\s?tech|mba|b\.?\s?sc|m\.?\s?sc|diploma|degree|university|college|school|institute|cgpa|gpa|class (x|xii|10|12)|batch of)\b/;
+  const RANGE = /\b((?:19|20)\d\d)\s*(?:-|–|—|to)\s*(?:[a-z]{3,9}\.?\s+)?((?:19|20)\d\d|present|current|now|till date|date)\b/g;
+  let inSchool = false;
+  const spans = [];
+  for (const line of low.split(/\r?\n/)) {
+    const t = line.trim();
+    if (/^(education|academics?|academic details|qualifications?|certifications?|courses?|training)\b/.test(t) && t.length < 40) { inSchool = true; continue; }
+    if (/^(experience|work|employment|internships?|projects?|skills?|summary|profile|achievements?|positions?|professional)\b/.test(t) && t.length < 40) { inSchool = false; continue; }
+    if (inSchool || SCHOOL.test(t)) continue;
+    for (const m of t.matchAll(RANGE)) {
+      const from = Number(m[1]);
+      const to = /^\d/.test(m[2]) ? Number(m[2]) : now;
+      if (from >= 1990 && from <= now && to >= from) spans.push([from, Math.min(to, now)]);
+    }
   }
-  return null;
+  if (!spans.length) return null;
+  return Math.max(...spans.map((s) => s[1])) - Math.min(...spans.map((s) => s[0]));
 }
 
 /** Lines that describe something built, used to judge project relevance. */

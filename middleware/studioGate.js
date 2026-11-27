@@ -47,6 +47,24 @@ function sessionStudentId(req) {
     return s ? (s.employeeId || s._id || s.id || '') : '';
 }
 
+/**
+ * Who is asking, in the shape studioAccess reads: their Student row, an
+ * Academic Portal learner (who can buy the combo but has no Student row, so
+ * checking only for one would bounce them off something they had just paid
+ * for), or null when nobody is signed in.
+ */
+async function subjectOf(req) {
+    const who = sessionStudentId(req);
+    const learner = (req.session && req.session.learner) || null;
+    if (!who && learner) {
+        return { _id: learner.id, employeeId: null, tenure: null, email: learner.email, name: learner.name };
+    }
+    if (!who) return null;
+    const Student = require('../models/Student');
+    return await Student.findOne({ employeeId: String(who) }).lean()
+        || (require('mongoose').Types.ObjectId.isValid(who) ? await Student.findById(who).lean() : null);
+}
+
 async function studioGate(req, res, next) {
     // Only ever a page request. A POST to something under these paths is not a
     // page and is guarded by its own route.
@@ -56,34 +74,14 @@ async function studioGate(req, res, next) {
     if (!portal) return next();
 
     try {
-        const who = sessionStudentId(req);
-        /*
-         * An Academic Portal learner can buy the combo, which contains these two
-         * portals. They have no Student row at all, so checking only for one
-         * would bounce them off something they had just paid for.
-         */
-        const learner = (req.session && req.session.learner) || null;
-        if (!who && learner) {
-            const subject = { _id: learner.id, employeeId: null, tenure: null,
-                              email: learner.email, name: learner.name };
-            if (await studioAccess.canOpen(subject, portal)) return next();
-            return res.redirect(302, '/studio.html?want=' + encodeURIComponent(portal)
-                + '&next=' + encodeURIComponent(req.originalUrl));
-        }
-        if (!who) {
+        const subject = await subjectOf(req);
+        if (!subject) {
             // Signed out. Send them to sign in and back here afterwards rather
             // than to a paywall for something they may already own.
             return res.redirect(302, '/login.html?next=' + encodeURIComponent(req.originalUrl));
         }
 
-        const Student = require('../models/Student');
-        const student = await Student.findOne({ employeeId: String(who) }).lean()
-            || (require('mongoose').Types.ObjectId.isValid(who)
-                ? await Student.findById(who).lean()
-                : null);
-        if (!student) return res.redirect(302, '/login.html?next=' + encodeURIComponent(req.originalUrl));
-
-        if (await studioAccess.canOpen(student, portal)) return next();
+        if (await studioAccess.canOpen(subject, portal)) return next();
 
         return res.redirect(302, '/studio.html?want=' + encodeURIComponent(portal)
             + '&next=' + encodeURIComponent(req.originalUrl));
@@ -99,4 +97,28 @@ async function studioGate(req, res, next) {
     }
 }
 
-module.exports = { studioGate, portalFor, GUARDED };
+/**
+ * The same rule for a portal's API, answered in JSON.
+ *
+ * The page was behind the paywall and everything the page does was not: the
+ * agents never looked at who was calling, so anyone could use them signed out.
+ * Fails closed, for the reason above.
+ */
+function studioApi(portal) {
+    return async function studioApiGate(req, res, next) {
+        try {
+            const subject = await subjectOf(req);
+            if (!subject) {
+                return res.status(401).json({ ok: false, error: 'Please sign in to use this.', signIn: '/login.html' });
+            }
+            if (await studioAccess.canOpen(subject, portal)) return next();
+            const name = portal === 'job' ? 'Job Portal' : 'Resume Portal';
+            return res.status(403).json({ ok: false, error: `This needs the ${name}. You can get it from the Career Studio.`, buy: '/studio.html?want=' + portal });
+        } catch (err) {
+            console.error('[studio-gate] api access check failed:', err.message);
+            return res.status(503).json({ ok: false, error: 'Could not check your access just now. Please try again in a minute.' });
+        }
+    };
+}
+
+module.exports = { studioGate, studioApi, portalFor, GUARDED };

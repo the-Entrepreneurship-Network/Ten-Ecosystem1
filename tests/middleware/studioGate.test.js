@@ -14,7 +14,7 @@ jest.mock('../../models/Student', () => ({ findOne: jest.fn(), findById: jest.fn
 
 const studioAccess = require('../../services/studioAccess');
 const Student = require('../../models/Student');
-const { studioGate, portalFor, GUARDED } = require('../../middleware/studioGate');
+const { studioGate, studioApi, portalFor, GUARDED } = require('../../middleware/studioGate');
 
 const lean = (v) => ({ lean: () => Promise.resolve(v) });
 
@@ -125,5 +125,62 @@ describe('when something goes wrong', () => {
     const { res, next } = await run({ session: { student: { employeeId: 'ghost' } } });
     expect(next).not.toHaveBeenCalled();
     expect(res.redirect.mock.calls[0][1]).toContain('/login.html');
+  });
+});
+
+/*
+ * The agents behind the pages. The page was paid for and the API it calls was
+ * not: /api/v2/jobs and /api/v2/resume never looked at who was calling.
+ */
+describe('the portal API', () => {
+  function call(portal, session) {
+    const req = { method: 'POST', path: '/search', session };
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    return studioApi(portal)(req, res, next).then(() => ({ res, next }));
+  }
+
+  it('answers a signed-out caller 401, and runs nothing', async () => {
+    const { res, next } = await call('job', {});
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ ok: false, signIn: '/login.html' });
+  });
+
+  it('answers a student without the portal 403, with where to get it', async () => {
+    const { res, next } = await call('resume', { student: { employeeId: 'TEN/WEB/1' } });
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ ok: false, buy: '/studio.html?want=resume' });
+    expect(res.json.mock.calls[0][0].error).toMatch(/Resume Portal/);
+  });
+
+  it('lets a student who has it through', async () => {
+    studioAccess.canOpen.mockResolvedValue(true);
+    const { res, next } = await call('job', { student: { employeeId: 'TEN/WEB/1' } });
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+    expect(studioAccess.canOpen).toHaveBeenCalledWith(expect.objectContaining({ employeeId: 'TEN/WEB/1' }), 'job');
+  });
+
+  it('checks an Academic Portal learner, who has no Student row', async () => {
+    studioAccess.canOpen.mockResolvedValue(true);
+    const { next } = await call('job', { learner: { id: 'L1', email: 'a@b.c', name: 'A' } });
+    expect(next).toHaveBeenCalled();
+    expect(studioAccess.canOpen).toHaveBeenCalledWith(expect.objectContaining({ _id: 'L1', employeeId: null }), 'job');
+  });
+
+  it('fails closed with 503 when the check itself breaks', async () => {
+    studioAccess.canOpen.mockRejectedValue(new Error('mongo down'));
+    const { res, next } = await call('job', { student: { employeeId: 'TEN/WEB/1' } });
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(503);
+  });
+
+  it('stands in front of the job, resume and outreach APIs in server.js', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../../server.js'), 'utf8');
+    expect(src).toMatch(/app\.use\('\/api\/v2\/resume', studioApi\('resume'\), v2ResumeAgent\)/);
+    expect(src).toMatch(/app\.use\('\/api\/v2\/jobs', studioApi\('job'\), v2JobAgent\)/);
+    expect(src).toMatch(/app\.use\("\/api\/v2\/job-outreach", require\("\.\/middleware\/studioGate"\)\.studioApi\("job"\)/);
   });
 });

@@ -184,7 +184,7 @@ describe('resume seat · ten journeys', () => {
     out = await walk(a, await turn(a, 'make it 96', out.session));
     expect(out.report.score).toBeGreaterThanOrEqual(96);
     /* The steps for everything it added, in points, and nothing else. */
-    expect(out.reply).toMatch(/Before you attach this: \d+ things?/);
+    expect(out.reply).toMatch(/Before you attach this: \d+ projects? on the page/);
   });
 
   it('8 · what is missing is added to the page as skills, not reported as missing', async () => {

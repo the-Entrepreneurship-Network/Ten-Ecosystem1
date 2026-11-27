@@ -12,6 +12,9 @@ import KineticGrid from './KineticGrid';
  */
 
 const API = '/api/v2/jobs';
+
+/* A refusal the server worded (sign in, get the portal) is shown as it is. */
+class Said extends Error {}
 const inter = { fontFamily: "'Inter', sans-serif" };
 
 /*
@@ -216,11 +219,11 @@ export default function JobAgent() {
       if (toEmail) body.append('to', toEmail);
       const res = await fetch(`${API}/materials`, { method: 'POST', body });
       const data = await res.json();
-      if (!data.ok) throw new Error(data.error);
+      if (!data.ok) throw new Said(data.error || 'Could not write the documents.');
       setMaterials({ ...data, toEmail });
       track(job, 'tailored'); /* fit-and-track.md: tailoring is a tracked event */
     } catch (e) {
-      setError('Could not write the documents. Paste your resume text and try again.');
+      setError(e instanceof Said ? e.message : 'Could not write the documents. Paste your resume text and try again.');
     } finally {
       setMaking('');
     }
@@ -235,7 +238,7 @@ export default function JobAgent() {
       if (text) body.append('text', text);
       const res = await fetch(`${API}/search`, { method: 'POST', body });
       const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'search failed');
+      if (!data.ok) throw new Said(data.error || 'The hunt could not run.');
       setCacheNote(data.cacheNote || null);
       setRecruiters(data.recruiters || []);
       /* Held for the materials step. A PDF is parsed on the server, so its
@@ -246,7 +249,7 @@ export default function JobAgent() {
       setSearches(data.searches);
       setSources(data.sources);
     } catch (e) {
-      setError('The hunt could not run. Check that the portal server is reachable, then try again.');
+      setError(e instanceof Said ? e.message : 'The hunt could not run. Check that the portal server is reachable, then try again.');
     } finally {
       setBusy(false);
     }

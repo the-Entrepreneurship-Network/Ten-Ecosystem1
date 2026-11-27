@@ -70,6 +70,8 @@
     try {
       const res = await fetch('/api/v2/resume/scan', { method: 'POST', body });
       const data = await res.json();
+      /* Signed out, or no Resume Portal: the server says which. */
+      if (res.status === 401 || res.status === 403) { verdictEl.textContent = data.error; return; }
       if (!data.ok) throw new Error(data.error);
       const r = data.report;
       verdictEl.innerHTML =

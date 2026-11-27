@@ -467,7 +467,11 @@ From the sidebar of `hr-portal.html`:
 
 **Career Studio** (`studio.html`, `routes/v2/studio.js`, `config/studioPricing.js`)
 - Course ₹300 (₹400 pay-after), Resume ₹150, Job ₹200, Combo ₹500.
-- The page gate covers `/job-portal/` and `/resume-portal/`.
+- The page gate covers `/job-portal/` and `/resume-portal/`, and the same rule
+  (`studioApi` in `middleware/studioGate.js`) covers their APIs:
+  `/api/v2/resume`, `/api/v2/jobs` and `/api/v2/job-outreach` answer 401 when
+  signed out and 403 without the product. Until November 2026 the APIs were
+  open to anyone, so the paywall only covered the page.
 - Paid-track ("premium") students get everything.
 
 **Job portal and Resume portal** (React apps)
@@ -476,6 +480,18 @@ From the sidebar of `hr-portal.html`:
 - TEN Resume AI is a rule-based ATS checker and builder, with no AI model in
   the loop. `.claude/skills/ats-resume` is the Claude Code version of the same
   rules.
+- **Nothing goes on the page that the student did not claim or pick.** Tailoring
+  and "make it N" rewrite wording and add only the projects the student picks
+  to build; "skip" adds nothing. Skills a job asks for are named in the reply
+  with how to learn them, never written onto the SKILLS line. Picked projects
+  are listed in the reply as not done yet and recorded in
+  `session.plannedGuides` under the title the page prints; the PDF and Word
+  downloads refuse while any is on the page. Until November 2026 the climb
+  added unpicked projects and the employer's skills to reach 92+, so scores are
+  lower now and honest.
+- Download PDF and Word send the text on screen and render it as it is.
+- The job agent reads a resume by whole words and takes seniority from the
+  title or work years, so a fresher is not ranked as senior.
 
 **Hackathon portal** (`routes/v2/hackathons.js`)
 - A public board; teams register with UPI payment and get a team code.

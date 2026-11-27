@@ -129,3 +129,31 @@ describe('x-ray searches', () => {
     expect(q).not.toContain('""');
   });
 });
+
+describe('reading a fresher as a fresher', () => {
+  /*
+   * Substrings and "the last level to match wins": a test resume with
+   * "JavaScript", "Excellent communication" and "showed leadership" came back
+   * senior, knowing Java and Excel, and "B.Tech, 2021 - 2025" was five years
+   * of work. Freshers were then ranked against senior jobs.
+   */
+  const FRESHER = 'Asha K\nFrontend intern\nSkills: JavaScript, React, HTML, CSS\nExcellent communication. Showed leadership as class representative.\nEDUCATION\nB.Tech Computer Science, 2021 - 2025\nPune';
+
+  it('reads whole words only', () => {
+    const p = profileFromResume(FRESHER);
+    expect(p.skills).toEqual(expect.arrayContaining(['javascript', 'react', 'html', 'css']));
+    expect(p.skills).not.toContain('java');
+    expect(p.skills).not.toContain('excel');
+    expect(profileFromResume('Ravi\nDeveloper\nBuilt a digital attendance app inside the college').skills).not.toContain('git');
+  });
+
+  it('does not count school years as work', () => {
+    expect(profileFromResume(FRESHER).years).toBeNull();
+  });
+
+  it('takes seniority from the title and work years, not from any word', () => {
+    expect(profileFromResume(FRESHER).seniority).toBe('intern');
+    expect(profileFromResume('Meena R\nSoftware Developer\nEXPERIENCE\nSoftware Developer | Infosys | Jul 2024 - Present\nInternship | Wipro | Jan 2024 - Jun 2024').seniority).toBe('entry');
+    expect(profileFromResume('Karan P\nSenior Software Engineer\nEXPERIENCE\nSenior Engineer | Flipkart | 2018 - Present\nSoftware Engineer | TCS | 2014 - 2018').seniority).toBe('senior');
+  });
+});
