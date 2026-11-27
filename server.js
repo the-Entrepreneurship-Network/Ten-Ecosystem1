@@ -3490,6 +3490,7 @@ app.get("/hr-portal", (req,res)=>{ res.sendFile(path.join(__dirname,"public","hr
 app.get("/hr-control-center", (req,res)=>{ res.sendFile(path.join(__dirname,"public","hr-portal.html")); });
 app.get("/hr-login", (req,res)=>{ res.sendFile(path.join(__dirname,"public","hr-login.html")); });
 app.get("/register", (req,res)=>{ res.sendFile(path.join(__dirname,"public","register.html")); });
+app.get("/refer", (req,res)=>{ res.sendFile(path.join(__dirname,"public","refer.html")); });
 
 // ── Phase 2 page routes ─────────────────────────────────────────────────────
 app.get("/registration-success", (req,res)=>{ res.sendFile(path.join(__dirname,"public","registration-success.html")); });
@@ -10959,6 +10960,14 @@ try {
     console.error('[V2] Failed to mount marketplace routes:', e.message);
 }
 
+// REFER & EARN — services/referrals.js; the page is public/refer.html (/refer).
+try {
+    app.use('/api/v2/referrals', require('./routes/v2/referrals'));
+    console.log('[V2] Referral routes mounted at /api/v2/referrals');
+} catch(e) {
+    console.error('[V2] Failed to mount referral routes:', e.message);
+}
+
 /*
  * Finish any college batch the previous process died in the middle of.
  *
@@ -12313,6 +12322,14 @@ server.listen(PORT, "0.0.0.0", ()=>{
             require("./services/automationCron").initAutomation();
         } catch (err) {
             console.error("[AUTO-CRON] Failed to start automation jobs:", err.message);
+        }
+        // Refer & Earn rewards, every 30 minutes. Same switches as the jobs above.
+        if (String(process.env.DISABLE_CRON_JOBS || "").toLowerCase() !== "true") {
+            try {
+                require("./services/referrals").startSweep();
+            } catch (err) {
+                console.error("[referrals] Failed to start the settle sweep:", err.message);
+            }
         }
     }
 

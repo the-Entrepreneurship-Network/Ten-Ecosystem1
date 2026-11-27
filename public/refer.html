@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Refer &amp; Earn — TEN Portal</title>
+<meta name="theme-color" content="#0e1628">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<script>
+  // The student's light/dark choice, from the dashboard toggle, before paint.
+  try { document.documentElement.setAttribute('data-theme', localStorage.getItem('ten-theme') || 'dark'); } catch (e) {}
+</script>
+<script src="/session-guard.js"></script>
+<script src="/push-client.js" defer></script>
+<link rel="stylesheet" href="/css/premium-theme.css">
+<script src="/js/premium-chrome.js" defer></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#05070e;--surface:#090d1a;--card:#0e1428;--card2:#121933;
+  --gold:#D4AF37;--gold-soft:rgba(212,175,55,0.10);--gold-line:rgba(212,175,55,0.25);
+  --text:#F0EEE8;--muted:#9a9080;--line:rgba(212,175,55,0.12);
+  --green:#10b981;--green-soft:rgba(16,185,129,0.12);
+  --amber:#f59e0b;--amber-soft:rgba(245,158,11,0.12);
+  --red:#ef4444;--red-soft:rgba(239,68,68,0.10);
+  --track:rgba(255,255,255,0.07);
+  --radius:16px;
+}
+[data-theme="light"]{
+  --bg:#f6f4ee;--surface:#ffffff;--card:#ffffff;--card2:#faf7ef;
+  --gold:#92660a;--gold-soft:rgba(146,102,10,0.08);--gold-line:rgba(146,102,10,0.28);
+  --text:#1b1813;--muted:#6b6457;--line:rgba(146,102,10,0.16);
+  --green:#047857;--green-soft:rgba(4,120,87,0.10);
+  --amber:#b45309;--amber-soft:rgba(180,83,9,0.10);
+  --red:#b91c1c;--red-soft:rgba(185,28,28,0.08);
+  --track:rgba(0,0,0,0.07);
+}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',system-ui,sans-serif;min-height:100vh;line-height:1.5}
+a{color:inherit}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+.topbar{display:flex;align-items:center;gap:14px;padding:16px 24px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
+.back-btn{background:var(--gold-soft);border:1px solid var(--gold-line);border-radius:10px;color:var(--gold);padding:8px 14px;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap}
+.topbar-title{font-size:17px;font-weight:800}
+.topbar-title span{color:var(--gold)}
+
+.wrap{max-width:980px;margin:0 auto;padding:28px 16px 64px;display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
+/* A grid item is never narrower than its content unless told so: without this a long link or table widens the page on a phone. */
+.wrap>*,.grid2>*,.hero>*{min-width:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+h1{font-family:'Playfair Display',Georgia,serif;font-size:clamp(26px,4vw,34px);line-height:1.15;text-wrap:balance}
+h2{font-size:17px;font-weight:800;margin-bottom:12px;text-wrap:balance}
+.sub{color:var(--muted);font-size:14px;max-width:62ch}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+@media (max-width:760px){.grid2{grid-template-columns:minmax(0,1fr)}}
+
+.notice{border-radius:12px;padding:14px 16px;font-size:14px;border:1px solid}
+.notice.info{background:var(--gold-soft);border-color:var(--gold-line)}
+.notice.warn{background:var(--red-soft);border-color:var(--red)}
+
+/* Link and sharing */
+.hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:start}
+@media (max-width:760px){.hero{grid-template-columns:minmax(0,1fr)}}
+.linkrow{display:flex;gap:8px;margin:18px 0 12px;flex-wrap:wrap}
+.linkbox{flex:1;min-width:0;background:var(--card2);border:1px solid var(--gold-line);border-radius:10px;padding:11px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn{border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;border:1px solid var(--gold-line);background:var(--gold-soft);color:var(--gold);text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn.primary{background:var(--gold);color:#1b1408;border-color:var(--gold)}
+[data-theme="light"] .btn.primary{color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.share{display:flex;gap:8px;flex-wrap:wrap}
+.qr{width:168px;text-align:center}
+.qr img{width:168px;height:168px;border-radius:12px;background:#fff;padding:8px;display:block}
+.qr a{font-size:12px;color:var(--gold);display:inline-block;margin-top:8px}
+@media (max-width:760px){.qr{width:auto;display:flex;gap:16px;align-items:center;text-align:left}.qr img{width:120px;height:120px}}
+
+/* Stage ladder */
+.ladder{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}
+@media (max-width:560px){.ladder{grid-template-columns:minmax(0,1fr)}}
+.step{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--card2)}
+.step.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+.step .rate{font-size:24px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
+.step .name{font-weight:800;font-size:14px}
+.step .when{font-size:12px;color:var(--muted)}
+.bar{height:8px;border-radius:99px;background:var(--track);overflow:hidden;margin:8px 0 6px}
+.bar i{display:block;height:100%;background:var(--gold);border-radius:99px;transition:width .8s ease}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:12px}
+.stat b{display:block;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+
+.money{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.money .stat b{font-size:20px}
+
+/* Lists */
+.table{width:100%;border-collapse:collapse;font-size:13px}
+.table th{text-align:left;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:700;padding:8px 6px;border-bottom:1px solid var(--line)}
+.table td{padding:10px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.table td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.pill.ok{background:var(--green-soft);color:var(--green)}
+.pill.wait{background:var(--amber-soft);color:var(--amber)}
+.pill.off{background:var(--red-soft);color:var(--red)}
+.pill.plain{background:var(--gold-soft);color:var(--gold)}
+.table .pill{white-space:normal}
+.empty{color:var(--muted);font-size:14px;padding:6px 0}
+
+.rules{display:grid;gap:10px;font-size:14px}
+.rules li{list-style:none;padding-left:14px;position:relative;color:var(--text)}
+.rules li::before{content:"";position:absolute;left:0;top:.6em;width:6px;height:6px;border-radius:50%;background:var(--gold)}
+.rules small{color:var(--muted)}
+
+.field{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.field input{flex:1;min-width:200px;background:var(--card2);border:1px solid var(--gold-line);border-radius:10px;padding:10px 12px;color:var(--text);font:inherit;font-size:14px}
+.msg{font-size:13px;margin-top:8px;min-height:1em}
+.msg.bad{color:var(--red)}
+.msg.good{color:var(--green)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+.loading{color:var(--muted);text-align:center;padding:48px 0}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="back-btn" href="student-dashboard.html">← Dashboard</a>
+  <div class="topbar-title">Refer <span>&amp; Earn</span></div>
+</div>
+
+<main class="wrap" id="app">
+  <div class="loading">Loading your Refer &amp; Earn page…</div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var app = document.getElementById('app');
+  var D = null;
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function rupees(n) {
+    return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function day(d) {
+    return d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  }
+  function toast(text) {
+    var t = document.getElementById('toast');
+    t.textContent = text;
+    t.classList.add('show');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+
+  function shareText() {
+    return 'I am doing a free remote internship with TEN (The Entrepreneurship Network): weekly tasks with a ' +
+      'coordinator, and letters anyone can verify online. Join with my link: ' + D.link;
+  }
+
+  function copyLink() {
+    var done = function () { toast('Link copied'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(D.link).then(done, fallback);
+    } else { fallback(); }
+    function fallback() {
+      var box = document.createElement('textarea');
+      box.value = D.link; document.body.appendChild(box); box.select();
+      try { document.execCommand('copy'); done(); } catch (e) { toast('Select the link and copy it'); }
+      document.body.removeChild(box);
+    }
+  }
+
+  function nativeShare() {
+    navigator.share({ title: 'Join TEN with my link', text: shareText(), url: D.link }).catch(function () {});
+  }
+
+  /* ---------------------------------------------------------- sections */
+
+  function heroCard() {
+    var r = D.rules;
+    return '<section class="card hero" aria-labelledby="h-link">' +
+      '<div>' +
+        '<div class="eyebrow">Your referral link</div>' +
+        '<h1 id="h-link">Bring a friend to TEN. You both earn.</h1>' +
+        '<p class="sub" style="margin-top:10px">Your friend gets ' + r.coinsWeek1 + ' coins when they finish week 1 and ' +
+          r.coinsFirstPayment + ' more when their first payment is approved, and so do you. You also earn ' +
+          D.stage.rate + '% of what they pay in their first ' + r.windowMonths + ' months.</p>' +
+        '<div class="linkrow">' +
+          '<div class="linkbox" id="link" title="' + esc(D.link) + '">' + esc(D.link) + '</div>' +
+          '<button class="btn primary" id="copyBtn" type="button">Copy link</button>' +
+        '</div>' +
+        '<div class="share">' +
+          '<a class="btn" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(shareText()) + '">WhatsApp</a>' +
+          '<a class="btn" target="_blank" rel="noopener" href="https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(D.link) + '">LinkedIn</a>' +
+          '<a class="btn" target="_blank" rel="noopener" href="https://t.me/share/url?url=' + encodeURIComponent(D.link) + '&text=' + encodeURIComponent('Join TEN with my link') + '">Telegram</a>' +
+          (navigator.share ? '<button class="btn" id="shareBtn" type="button">More…</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="qr">' +
+        '<img src="/api/v2/referrals/qr.png" alt="QR code for your referral link" width="168" height="168">' +
+        '<div><a href="/api/v2/referrals/qr.png?download=1" download="ten-refer-qr.png">Download QR</a>' +
+        '<div class="sub" style="font-size:12px;margin-top:4px">For posters and class groups</div></div>' +
+      '</div>' +
+    '</section>';
+  }
+
+  function stageCard() {
+    var r = D.rules, paying = D.counts.paying, s = D.stage;
+    var steps = [
+      { key: 'starter', name: 'Starter', rate: r.rates.starter + '%', when: 'From your first paying friend' },
+      { key: 'promoter', name: 'Promoter', rate: r.rates.promoter + '%', when: 'At ' + r.promoterAt + ' paying friends' },
+      { key: 'ambassador', name: 'Campus Ambassador', rate: r.rates.ambassador + '–' + r.rates.ambassadorTop + '%',
+        when: 'Apply at ' + r.ambassadorAt + '; ' + r.rates.ambassadorTop + '% from ' + r.topRateAt }
+    ];
+    var target = D.next ? D.next.at : paying;
+    var pct = target ? Math.min(100, Math.round(paying / target * 100)) : 100;
+    var nextLine;
+    if (D.next) {
+      nextLine = D.next.remaining + ' more paying friend' + (D.next.remaining === 1 ? '' : 's') + ' to ' +
+        (D.next.apply ? 'apply for Campus Ambassador' : esc(D.next.name) + ' (' + D.next.rate + '%)');
+    } else if (s.key === 'promoter') {
+      nextLine = 'You can apply to be your college’s Campus Ambassador below.';
+    } else {
+      nextLine = 'You are at the top rate.';
+    }
+    return '<section class="card" aria-labelledby="h-stage">' +
+      '<div class="eyebrow">Your stage</div>' +
+      '<h2 id="h-stage">' + esc(s.name) + ': ' + s.rate + '% of every payment your friends make</h2>' +
+      '<div class="ladder">' + steps.map(function (st) {
+        return '<div class="step' + (st.key === s.key ? ' on' : '') + '"' + (st.key === s.key ? ' aria-current="step"' : '') + '>' +
+          '<div class="rate">' + st.rate + '</div><div class="name">' + st.name + '</div><div class="when">' + st.when + '</div></div>';
+      }).join('') + '</div>' +
+      '<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + target + '" aria-valuenow="' + paying + '"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="sub">' + nextLine + '</div>' +
+      '<div class="stats" style="margin-top:16px">' +
+        '<div class="stat"><b>' + D.counts.joined + '</b><span>Joined with your link</span></div>' +
+        '<div class="stat"><b>' + D.counts.week1 + '</b><span>Finished week 1</span></div>' +
+        '<div class="stat"><b>' + paying + '</b><span>Paying friends</span></div>' +
+      '</div>' +
+    '</section>';
+  }
+
+  function coinsCard() {
+    var r = D.rules;
+    return '<section class="card" aria-labelledby="h-coins">' +
+      '<div class="eyebrow">Coins from referrals</div>' +
+      '<h2 id="h-coins">' + D.coins.toLocaleString('en-IN') + ' coins earned</h2>' +
+      '<ul class="rules">' +
+        '<li>' + r.coinsWeek1 + ' coins each, for you and your friend, when they finish week 1.</li>' +
+        '<li>' + r.coinsFirstPayment + ' coins each when their first payment is approved.</li>' +
+        '<li>Signing up alone earns nothing: your friend has to start, and a payment has to be approved.</li>' +
+      '</ul>' +
+      '<p class="sub" style="margin-top:12px;font-size:13px">Coins go straight into your balance, and you can spend them in the Marketplace.</p>' +
+    '</section>';
+  }
+
+  function earningsCard() {
+    var e = D.earnings, r = D.rules;
+    var rows = e.history.map(function (h) {
+      var pill = h.status === 'reversed' ? '<span class="pill off">Reversed</span>'
+        : h.status === 'pending' ? '<span class="pill wait">Unlocks ' + day(h.availableAt) + '</span>'
+        : '<span class="pill ok">Available</span>';
+      return '<tr><td>' + esc(h.friend) + '<div class="sub" style="font-size:12px">' + day(h.paidAt) + '</div></td>' +
+        '<td class="num">' + h.rate + '%</td><td class="num">' + rupees(h.amount) + '</td><td>' + pill + '</td></tr>';
+    }).join('');
+    return '<section class="card" aria-labelledby="h-earn">' +
+      '<div class="eyebrow">Your earnings</div>' +
+      '<h2 id="h-earn">' + rupees(e.pending + e.available) + ' earned</h2>' +
+      '<div class="money">' +
+        '<div class="stat"><b>' + rupees(e.pending) + '</b><span>Pending' + (e.nextUnlock ? ', next unlocks ' + day(e.nextUnlock) : '') + '</span></div>' +
+        '<div class="stat"><b>' + rupees(e.available) + '</b><span>Available</span></div>' +
+        '<div class="stat"><b>' + rupees(e.reversed) + '</b><span>Reversed by refunds</span></div>' +
+      '</div>' +
+      '<p class="sub" style="font-size:13px">Each share unlocks ' + r.unlockDays + ' days after the payment is approved. ' +
+        'Withdrawals are not open yet. When they open, you can withdraw from ' + rupees(r.minWithdrawal).replace('.00', '') +
+        ', once a month, to your own UPI ID.</p>' +
+      (rows ? '<div class="scroll" style="margin-top:14px"><table class="table"><thead><tr><th>Friend</th><th style="text-align:right">Rate</th>' +
+        '<th style="text-align:right">Amount</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<p class="empty" style="margin-top:12px">Nothing yet. Your share of a friend’s payment appears here as soon as TEN approves it.</p>') +
+    '</section>';
+  }
+
+  function friendsCard() {
+    var rows = D.friends.map(function (f) {
+      var status = !f.counted ? '<span class="pill off">Not counted: same email or phone as you</span>'
+        : f.paying ? '<span class="pill ok">Paying friend</span>'
+        : f.week1 ? '<span class="pill plain">Finished week 1</span>'
+        : '<span class="pill wait">Joined</span>';
+      return '<tr><td>' + esc(f.name) + '</td><td>' + day(f.joinedAt) + '</td><td>' + status + '</td></tr>';
+    }).join('');
+    return '<section class="card" aria-labelledby="h-friends">' +
+      '<div class="eyebrow">Your friends</div>' +
+      '<h2 id="h-friends">' + (D.friends.length ? D.friends.length + ' joined with your link' : 'No one has joined with your link yet') + '</h2>' +
+      (rows ? '<div class="scroll"><table class="table"><thead><tr><th>Name</th><th>Joined</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<p class="empty">Share your link in your class group or with a friend who is looking for an internship. They appear here the moment they sign up.</p>') +
+    '</section>';
+  }
+
+  function ambassadorCard() {
+    var a = D.ambassador, r = D.rules, body;
+    if (a.status === 'approved') {
+      body = '<h2>You are TEN’s Campus Ambassador for ' + esc(a.college) + '</h2>' +
+        '<p class="sub">You earn ' + r.rates.ambassador + '%, and ' + r.rates.ambassadorTop + '% from ' + r.topRateAt + ' paying friends.</p>';
+    } else if (a.status === 'applied') {
+      body = '<h2>Your application is with TEN</h2>' +
+        '<p class="sub">You applied for ' + esc(a.college) + '. TEN approves one Campus Ambassador per college, and you will get a notification with the answer.</p>';
+    } else if (a.canApply) {
+      body = '<h2>Apply to be your college’s Campus Ambassador</h2>' +
+        (a.status === 'rejected' ? '<p class="notice info" style="margin-bottom:10px">Your last application was not approved' + (a.note ? ': ' + esc(a.note) : '.') + ' You can apply again.</p>' : '') +
+        '<p class="sub">One per college. Ambassadors earn ' + r.rates.ambassador + '%, and ' + r.rates.ambassadorTop + '% from ' + r.topRateAt + ' paying friends.</p>' +
+        '<form class="field" id="ambForm"><label class="sr" for="college" style="position:absolute;left:-9999px">College name</label>' +
+        '<input id="college" name="college" maxlength="120" required placeholder="Your college" value="' + esc(a.college) + '">' +
+        '<button class="btn primary" type="submit">Apply</button></form><div class="msg" id="ambMsg" role="status"></div>';
+    } else {
+      body = '<h2>Campus Ambassador</h2>' +
+        '<p class="sub">At ' + r.ambassadorAt + ' paying friends you can apply to be your college’s Campus Ambassador. ' +
+        'TEN approves one per college. Ambassadors earn ' + r.rates.ambassador + '%, rising to ' + r.rates.ambassadorTop + '% at ' + r.topRateAt + ' paying friends.</p>';
+    }
+    return '<section class="card" aria-label="Campus Ambassador"><div class="eyebrow">Campus Ambassador</div>' + body + '</section>';
+  }
+
+  function rulesCard() {
+    var r = D.rules;
+    return '<section class="card" aria-labelledby="h-rules">' +
+      '<div class="eyebrow">How it works</div><h2 id="h-rules">The rules, in full</h2>' +
+      '<ul class="rules">' +
+        '<li>A friend counts as a <b>paying friend</b> once TEN approves their first payment for a plan, a certificate or anything else in the portal. Signing up is not enough.</li>' +
+        '<li>Your stage sets your share: Starter ' + r.rates.starter + '%, Promoter ' + r.rates.promoter + '% at ' + r.promoterAt +
+          ' paying friends, and Campus Ambassador ' + r.rates.ambassador + '% (apply at ' + r.ambassadorAt + '), then ' + r.rates.ambassadorTop + '% at ' + r.topRateAt + '.</li>' +
+        '<li>You earn on payments your friend makes in their first ' + r.windowMonths + ' months. Each share unlocks ' + r.unlockDays + ' days after the payment.</li>' +
+        '<li>If a payment is refunded, the share from it is reversed.</li>' +
+        '<li>Only the friend’s own referrer earns from a payment. There are no levels above that.</li>' +
+        '<li>A friend with the same email or phone number as you is not counted. TEN can put rewards on hold while it checks an account.</li>' +
+      '</ul>' +
+    '</section>';
+  }
+
+  function render() {
+    var top = '';
+    if (D.frozen) {
+      top += '<div class="notice warn" role="alert">Your referral rewards are on hold while TEN checks your account. ' +
+        'Nothing you have earned is lost. Write to the help desk at complaints@entrepreneurshipnetwork.net if you have questions.</div>';
+    }
+    if (D.referredBy) {
+      top += '<div class="notice info">You joined with ' + esc(D.referredBy.name) + '’s link. You get ' + D.rules.coinsWeek1 +
+        ' coins when you finish week 1, and ' + D.rules.coinsFirstPayment + ' more when your first payment is approved.</div>';
+    }
+    app.innerHTML = top + heroCard() + stageCard() +
+      '<div class="grid2">' + coinsCard() + earningsCard() + '</div>' +
+      friendsCard() + ambassadorCard() + rulesCard();
+
+    document.getElementById('copyBtn').addEventListener('click', copyLink);
+    var shareBtn = document.getElementById('shareBtn');
+    if (shareBtn) shareBtn.addEventListener('click', nativeShare);
+    var form = document.getElementById('ambForm');
+    if (form) form.addEventListener('submit', apply);
+  }
+
+  function apply(ev) {
+    ev.preventDefault();
+    var msg = document.getElementById('ambMsg');
+    var btn = ev.target.querySelector('button');
+    btn.disabled = true; msg.className = 'msg'; msg.textContent = 'Sending…';
+    fetch('/api/v2/referrals/ambassador/apply', {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ college: document.getElementById('college').value })
+    }).then(function (r) { return r.json(); }).then(function (out) {
+      if (out.success) { load(); return; }
+      btn.disabled = false; msg.className = 'msg bad'; msg.textContent = out.message || 'That did not work. Try again.';
+    }).catch(function () {
+      btn.disabled = false; msg.className = 'msg bad'; msg.textContent = 'No connection. Try again.';
+    });
+  }
+
+  function load() {
+    fetch('/api/v2/referrals/me', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (out) {
+        if (!out.success) throw new Error(out.message || 'failed');
+        D = out;
+        render();
+      })
+      .catch(function (err) {
+        app.innerHTML = '<div class="card"><h2>Refer &amp; Earn could not load</h2><p class="sub">' +
+          esc(err && err.message && err.message !== 'failed' ? err.message : 'Check your connection and refresh the page.') + '</p></div>';
+      });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

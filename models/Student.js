@@ -132,6 +132,24 @@ const studentsSchema = new mongoose.Schema({
     // utils/signupRef.js. Counted by GET /api/growth/signup-sources.
     signupRef:            { type: String },
 
+    // Refer & Earn (services/referrals.js). The student's own link is
+    // /register?ref=stu-<referralCode>; a friend who signs up through it keeps
+    // that ref as signupRef. The code is made the first time it is needed.
+    referralCode:         { type: String, unique: true, sparse: true },
+    // Set by an admin: no new referral rewards until it is cleared.
+    referralFrozen:       { type: Boolean, default: false },
+    // Campus Ambassador. The student applies at 10 paying friends; an admin
+    // approves one per college.
+    ambassador: {
+        status:     { type: String, enum: ['', 'applied', 'approved', 'rejected'], default: '' },
+        college:    { type: String, default: '' },
+        collegeKey: { type: String, default: '' },
+        appliedAt:  { type: Date, default: null },
+        decidedAt:  { type: Date, default: null },
+        decidedBy:  { type: String, default: '' },
+        note:       { type: String, default: '' }
+    },
+
     /*
      * Every time HR has sent this student back through the joiner wizard.
      *
@@ -346,6 +364,8 @@ const studentsSchema = new mongoose.Schema({
 // and a unique index that cannot be built would fail at startup.
 studentsSchema.index({ email: 1 });
 studentsSchema.index({ domain: 1 });
+// A referrer's friends are found by their signupRef (services/referrals.js).
+studentsSchema.index({ signupRef: 1 }, { sparse: true });
 
 // Sort keys for the HR lists.
 //
