@@ -5,7 +5,8 @@
  *
  * /api/v2/meeting (routes/v2/meeting.js): only a signed-in student, only when
  * the AI Coordinator is on, 403 outside the opening, and the answers pass
- * straight through.
+ * straight through. /voice sends the interviewer's line as MP3, or 204 so the
+ * page uses the device's voice.
  */
 
 const BUSY = 'The AI is busy right now. Try again in a minute; your interview continues where it stopped.';
@@ -18,6 +19,9 @@ jest.mock('../../services/aiMeeting', () => ({
     answerInterview: jest.fn(async ({ answer, seconds, proctor }) => (answer === 'busy' ? { error: BUSY }
         : answer === '' ? { error: 'Say or type your answer first.' } : { score: 7, feedback: 'ok', question: 'Q2', number: 2, of: 8, done: false, report: null, got: { seconds, proctor } })),
     finishInterview: jest.fn(async () => ({ report: { overall: 7 } })),
+    warnInterview: jest.fn(async ({ kind }) => (kind === 'left' ? { warnings: 3, of: 3, ended: true, report: { overall: 4 } } : { error: 'Unknown warning.' })),
+    voiceInfo: jest.fn(() => ({ natural: true, name: 'Kajal', sample: 'Hello.', end: 'Thank you.' })),
+    voiceOf: jest.fn(async ({ n, part }) => (part === 'sample' || n === 1 ? Buffer.from('mp3') : null)),
     _internal: { BUSY }
 }));
 jest.mock('../../services/aiCoordinator', () => ({ NAME: 'TEN AI Coordinator', enabled: () => !/^off$/i.test(process.env.AI_COORDINATOR || '') }));
@@ -32,10 +36,11 @@ function handler(method, path) {
     return h[h.length - 1].handle;
 }
 async function call(method, path, body, who = student) {
-    let status = 200; let out;
-    const res = { status(c) { status = c; return this; }, json(b) { out = b; return this; } };
+    let status = 200; let out; const headers = {};
+    const res = { status(c) { status = c; return this; }, json(b) { out = b; return this; }, set(k, v) { headers[k] = v; return this; },
+        type(t) { headers.type = t; return this; }, send(b) { out = b; return this; }, end() { return this; } };
     await handler(method, path)({ student: who, body: body || {}, query: {}, params: {} }, res);
-    return { status, body: out };
+    return Object.assign({ status, body: out }, Object.keys(headers).length ? { headers } : {});
 }
 
 afterEach(() => { delete process.env.AI_COORDINATOR; });
@@ -49,7 +54,7 @@ describe('/api/v2/meeting', () => {
     it('says who is here, when the room opens, today\'s state and the past reports', async () => {
         const { body } = await call('get', '/');
         expect(body).toMatchObject({ success: true, enabled: true, name: 'Priya', domain: 'Web Development', assistant: 'TEN AI Coordinator', questions: 8, state: 'open', sessionId: null,
-            schedule: { open: true, nextLabel: 'Sunday, 13 December 2026' }, reports: [{ id: 's0', overall: 6 }] });
+            schedule: { open: true, nextLabel: 'Sunday, 13 December 2026' }, reports: [{ id: 's0', overall: 6 }], voice: { natural: true, end: 'Thank you.' } });
     });
 
     it('starts the interview at the chosen level, and answers 403 outside the opening', async () => {
@@ -67,10 +72,27 @@ describe('/api/v2/meeting', () => {
         expect((await call('post', '/interview/finish', { sessionId: 's1', proctor })).body).toEqual({ success: true, report: { overall: 7 } });
     });
 
+    it('records a warning and passes on the end of the interview at the third', async () => {
+        expect((await call('post', '/interview/warning', { sessionId: 's1', kind: 'left' })).body).toEqual({ success: true, warnings: 3, of: 3, ended: true, report: { overall: 4 } });
+        expect(await call('post', '/interview/warning', { sessionId: 's1', kind: 'x' })).toEqual({ status: 400, body: { success: false, message: 'Unknown warning.', closed: false } });
+    });
+
+    it('sends an interviewer line as MP3, or 204 for the device voice', async () => {
+        const meeting = require('../../services/aiMeeting');
+        const r = await call('post', '/voice', { sessionId: 's1', n: 1, lead: 'intro' });
+        expect(r).toMatchObject({ status: 200, headers: { type: 'audio/mpeg' } });
+        expect(String(r.body)).toBe('mp3');
+        expect(meeting.voiceOf).toHaveBeenLastCalledWith({ student, sessionId: 's1', n: 1, lead: 'intro', part: undefined });
+        expect((await call('post', '/voice', { sessionId: 's1', n: 2, lead: 'ack' })).status).toBe(204);
+        meeting.voiceOf.mockRejectedValueOnce(new Error('boom'));
+        expect((await call('post', '/voice', { part: 'end' })).status).toBe(204);
+    });
+
     it('is switched off with the AI Coordinator', async () => {
         process.env.AI_COORDINATOR = 'off';
         expect((await call('post', '/interview/start')).status).toBe(503);
         expect((await call('post', '/interview/answer', { sessionId: 's1', answer: 'hi' })).status).toBe(503);
+        expect((await call('post', '/voice', { part: 'sample' })).status).toBe(503);
         expect((await call('get', '/')).body).toMatchObject({ enabled: false, state: 'off', reports: [], levels: ['easy', 'medium', 'hard'], schedule: { open: false } });
     });
 });

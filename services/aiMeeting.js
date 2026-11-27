@@ -12,12 +12,18 @@
  *              Task Journey, submitted work), at the level of a company
  *              interview: the ideas, trade-offs and debugging behind the
  *              tasks, never the task text itself. Each spoken or typed answer
- *              is scored out of 10 with two sentences of feedback.
+ *              is scored out of 10 for its ideas, not its wording (partial marks
+ *              for the right keywords and direction), with two sentences of feedback.
  *   Camera     required. The page checks, in the browser, that one face is in
- *              frame with its eyes on the camera, and sends the running totals
- *              with each answer; they are kept with the session and go into
- *              the report. ponytail: client-reported; checking the video on
- *              the server would cost money and the room must stay at ₹0.
+ *              frame with its eyes on the camera, pauses the interview while it
+ *              is not, and sends the running totals with each answer; they are
+ *              kept with the session and go into the report. An answer sent
+ *              without the face check running is refused. Leaving the
+ *              interview window, or holding a phone or notes up to the camera,
+ *              is a warning recorded here (warnInterview); the third ends the
+ *              interview with the report of what was answered. ponytail:
+ *              client-reported; checking the video on the server would cost
+ *              money and the room must stay at ₹0.
  *   Report     a mark per question, an overall mark, the strengths, the gaps
  *              and what to work on before the next interview. Saved
  *              (models/MeetingSession.js), shown on the page, emailed to the
@@ -34,9 +40,11 @@
  *            interview keeps the AI it started with, and a turn Claude fails
  *            is answered by Gemini.
  *
- * Listening and speaking happen in the browser (Web Speech API), so the
- * server only passes text. It is an AI and says so; a person can still
- * overrule a mark.
+ * Listening happens in the browser (Web Speech API). Speaking: the
+ * interviewer's lines are written here (spokenLine) and voiced by Amazon
+ * Polly's Indian-English neural voice when the AWS_POLLY keys are set
+ * (utils/speech.js), otherwise by the device's own voice. It is an AI and says so;
+ * a person can still overrule a mark.
  */
 
 const mongoose = require('mongoose');
@@ -48,6 +56,7 @@ const StudentTaskProgress = require('../models/new/StudentTaskProgress');
 const DomainTask = require('../models/new/DomainTask');
 const gemini = require('../utils/gemini');
 const claude = require('../utils/claude');
+const speech = require('../utils/speech');
 const { istDayStart, istDateKey, IST_OFFSET_MS } = require('../utils/dateKey');
 const ai = require('./aiCoordinator');
 
@@ -69,6 +78,10 @@ const ANCHOR = '2026-11-29';
 const EVERY_DAYS = 14;
 const DAY_MS = 86400000;
 const BUSY = 'The AI is busy right now. Try again in a minute; your interview continues where it stopped.';
+const NO_FACE_CHECK = 'The face check is not running, so the answer was not taken. Reload the page with your camera on and continue.';
+/** Warnings that end an interview, and what each kind is called in the report. */
+const WARNINGS_TO_END = 3;
+const WARNING_TEXT = { left: 'left the interview window', object: 'held a phone or notes up to the camera' };
 
 const clean = (s, max) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, max);
 const nameOf = (s) => s.name || [s.firstName, s.lastName].filter(Boolean).join(' ').trim() || 'there';
@@ -116,6 +129,8 @@ async function status({ student }) {
         state: open ? 'resume' : taken ? 'taken' : !when.open ? 'closed' : 'open',
         sessionId: open ? String(open._id) : null,
         difficulty: open ? open.difficulty : null,
+        warnings: open ? (open.warnings || []).length : 0,
+        warningsToEnd: WARNINGS_TO_END,
         levels: LEVELS,
         reports: await reports({ student })
     };
@@ -178,7 +193,7 @@ const CLAUDE_SCHEMA = {
  * done. The student's name, email, phone and Employee ID are never sent.
  */
 const LEVEL_TEXT = {
-    easy: 'Level: EASY. Ask about the core ideas behind each task, one step at a time, as for a first interview: someone who did the work should answer most of them. Still mark strictly.',
+    easy: 'Level: EASY. Ask about the core ideas behind each task, one step at a time, as for a first interview: someone who did the work should answer most of them.',
     medium: 'Level: MEDIUM. Ask as in a real interview for a junior developer: the ideas, "how would you" and the trade-offs behind the tasks.',
     hard: 'Level: HARD. Ask as a senior engineer hiring for a demanding role: failure cases, trade-offs, debugging under pressure and scaling, and dig into every weak or vague answer.'
 };
@@ -200,8 +215,12 @@ function interviewPrompt({ domain, context, topics, turns, answer, number, diffi
         'Every question tests one thing and has a checkable answer. Mix concepts, "how would you" and "what breaks if"; when an answer was weak or vague, the next question digs into it.',
         history ? `Interview so far:\n${history}` : (answer ? '' : 'The interview is starting.'),
         last && answer ? `Q${turns.length}: ${last.question}\nThe intern's answer, spoken aloud and transcribed, so ignore small transcription slips:\n"${last.answer}"` : '',
-        last && answer ? 'Score it from 0 to 10, strictly: 10 is complete, correct and well organised; 5 is partly right; 0 is wrong, empty or off the point. ' +
-            'Feedback in at most two sentences: what was missing or wrong, then what a strong answer includes.' : '',
+        last && answer ? 'Score it from 0 to 10 for the ideas, not the wording. The intern speaks in their own words, so never expect a textbook answer word for word, ' +
+            'and ignore filler words, grammar and transcription slips. Give credit for every correct point: ' +
+            'an answer that names the key idea or the main keywords and is heading the right way earns 3 to 5 even if it is incomplete; ' +
+            'the right idea explained in their own words, 6 to 7; correct with an example, a reason or a trade-off, 8 to 9; complete and well organised, 10. ' +
+            'Give 0 to 2 only when the answer is wrong, empty or off the point. Between two marks, give the higher one. ' +
+            'Feedback in at most two sentences: what was right or missing, then what a strong answer includes.' : '',
         finishing
             ? `That was question ${QUESTIONS} of ${QUESTIONS}. Set done to true, leave question empty, and write the report in at most five sentences: ` +
               'the strengths, the gaps, and two concrete things to work on before the next interview. Give an overall mark from 0 to 10 consistent with the scores.'
@@ -238,13 +257,84 @@ function attentionText(p) {
         (p.cameraOffEpisodes ? `; camera off ${p.cameraOffEpisodes} time(s)` : '') + '.';
 }
 
+// ── What the interviewer says ────────────────────────────────────────────
+// The page shows the question and speaks these lines: Polly's voice when it is
+// set up (voiceOf), the device's voice otherwise. Fixed lines, so a student
+// cannot have the paid-for voice read out text of their own.
+const SAMPLE_LINE = 'Hello. I am your TEN interviewer. A question will sound like this: your API returned the right data in testing, but times out in production. Where do you look first, and why?';
+const END_LINE = 'That brings us to the end of the interview. Thank you for your time. Your report is on the screen now, and a copy is on its way to your email.';
+const ACKS = ['Thank you.', 'Alright, thank you.', 'Okay. Let us move on.', 'Thank you for that.', 'Understood.', 'Right. Next one.', 'Thank you.'];
+/** Morning, afternoon or evening in India, for the greeting. */
+function partOfDay(now = new Date()) {
+    const h = new Date(now.getTime() + IST_OFFSET_MS).getUTCHours();
+    return h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+}
+// greet / back: the welcome when the student joins or rejoins, ending with "How are
+// you doing today?"; the page waits for the student's reply (not marked, not kept).
+// begin: after that reply, the format and the question they start on. ack: the
+// acknowledgement of an answer and the next question.
+const LEADS = ['greet', 'back', 'begin', 'ack'];
+function spokenLine(session, student, n, lead) {
+    const turn = session.turns[n - 1];
+    if (!turn || !turn.question) return '';
+    const first = nameOf(student).split(' ')[0];
+    const level = levelName(session.difficulty);
+    const domain = session.domain || 'your domain';
+    if (lead === 'greet') return `Hi ${first}, good ${partOfDay()}. I am your TEN interviewer for today's ${level} level interview in ${domain}. How are you doing today?`;
+    if (lead === 'back') return `Hi ${first}, good ${partOfDay()}, and welcome back to your ${level} level interview. How are you doing?`;
+    const opening = lead !== 'begin' ? ACKS[Math.max(0, n - 2) % ACKS.length]
+        : n === 1 ? `Thank you, ${first}. Over the next twenty minutes, I will ask you ${QUESTIONS} questions on the work you have done in your internship. ` +
+            'Take a moment to think before each answer, and answer in your own words. Okay, let us start with the interview.'
+        : `Thank you, ${first}. Let us continue from question ${n}, where we stopped.`;
+    return `${opening} ${n === QUESTIONS ? 'The last question.' : `Question ${n}.`} ${turn.question}`;
+}
+
+// ponytail: per-process memory, newest kept; enough to replay a line or survive a reload.
+const voiceCache = new Map();
+/** MP3 of one interviewer line, or null when the natural voice is off or Polly refused. */
+async function voiceOf({ student, sessionId, n, lead, part }) {
+    if (!speech.ready()) return null;
+    let key, text;
+    if (part === 'sample' || part === 'end') {
+        key = part;
+        text = part === 'sample' ? SAMPLE_LINE : END_LINE;
+    } else {
+        if (!mongoose.Types.ObjectId.isValid(String(sessionId))) return null;
+        const session = await MeetingSession.findOne({ _id: sessionId, studentId: student._id }).lean();
+        const num = Math.round(Number(n));
+        const why = LEADS.includes(lead) ? lead : 'ack';
+        text = session && spokenLine(session, student, num, why);
+        if (!text) return null;
+        key = `${sessionId}:${num}:${why}`;
+    }
+    if (voiceCache.has(key)) return voiceCache.get(key);
+    const audio = await speech.speak(text);
+    if (audio) {
+        voiceCache.set(key, audio);
+        if (voiceCache.size > 200) voiceCache.delete(voiceCache.keys().next().value);
+    }
+    return audio;
+}
+/** For the page: whether the natural voice is on, and the fixed lines for the device voice. */
+const voiceInfo = () => ({ natural: speech.ready(), name: speech.voice(), sample: SAMPLE_LINE, end: END_LINE });
+
+/** One line for the report: the warnings, or nothing. */
+function warningText(warnings) {
+    const n = (warnings || []).length;
+    if (!n) return '';
+    const by = Object.keys(WARNING_TEXT).map((k) => [k, warnings.filter((w) => w.kind === k).length]).filter(([, c]) => c)
+        .map(([k, c]) => `${WARNING_TEXT[k]} ${c} time(s)`);
+    return ` Warnings: ${n} of ${WARNINGS_TO_END} (${by.join('; ')}).`;
+}
+const cameraLine = (s) => attentionText(s.proctor) + warningText(s.warnings);
+
 const answered = (s) => s.turns.filter((t) => t.answer);
 const marksOf = (s) => ({ got: answered(s).reduce((a, t) => a + (t.score || 0), 0), of: answered(s).length * 10 });
 const levelName = (d) => (d ? d[0].toUpperCase() + d.slice(1) : 'Medium');
 const view = (s) => ({
     id: String(s._id), domain: s.domain, startedAt: s.startedAt, endedAt: s.endedAt, overall: s.overall, summary: s.summary,
     difficulty: s.difficulty || 'medium', trial: !!s.trial,
-    marks: marksOf(s), attention: attentionText(s.proctor), emailed: !!s.emailed,
+    marks: marksOf(s), attention: cameraLine(s), warnings: (s.warnings || []).length, emailed: !!s.emailed,
     questions: s.turns.length, turns: s.turns.map((t) => ({ question: t.question, answer: t.answer, score: t.score, feedback: t.feedback, seconds: t.seconds || 0 }))
 });
 
@@ -333,7 +423,8 @@ async function startInterview({ student, difficulty }) {
     const open = await openSessionOf(student);
     if (open) {
         const last = open.turns[open.turns.length - 1];
-        return { sessionId: String(open._id), question: last.question, number: open.turns.length, of: QUESTIONS, difficulty: open.difficulty, resumed: true };
+        return { sessionId: String(open._id), question: last.question, number: open.turns.length, of: QUESTIONS, difficulty: open.difficulty, resumed: true,
+            greeting: spokenLine(open, student, open.turns.length, 'back'), say: spokenLine(open, student, open.turns.length, 'begin') };
     }
     if (!when.trial && await used(student)) return { error: 'You have taken your interview. Your report is on this page and in your email.', closed: true };
     if (!when.open) return { error: `The interview opens every second Sunday. Next: ${longDate(when.next)} (IST).`, closed: true };
@@ -349,7 +440,8 @@ async function startInterview({ student, difficulty }) {
         difficulty, engine: use.engine, claudeModel: use.model, trial: when.trial
     });
     await log(student, 'interview', 'start', question);
-    return { sessionId: String(session._id), question, number: 1, of: QUESTIONS, difficulty };
+    return { sessionId: String(session._id), question, number: 1, of: QUESTIONS, difficulty,
+        greeting: spokenLine(session, student, 1, 'greet'), say: spokenLine(session, student, 1, 'begin') };
 }
 
 async function openSession(student, sessionId) {
@@ -365,12 +457,14 @@ async function close(student, session, { summary, overall }) {
     session.emailed = await emailReport(student, session);
     await session.save();
     await log(student, 'report', `${answered(session).length} of ${QUESTIONS} answered, ${session.difficulty || 'medium'}, ${session.engine || 'gemini'}${session.trial ? ', trial' : ''}`,
-        `overall ${session.overall == null ? '-' : session.overall}/10. ${attentionText(session.proctor)}`);
+        `overall ${session.overall == null ? '-' : session.overall}/10. ${cameraLine(session)}`);
     return view(session);
 }
 
 /** The student's answer: its score and feedback, then the next question or the report. */
 async function answerInterview({ student, sessionId, answer, seconds, proctor }) {
+    const counted = proctorOf(proctor);
+    if (!counted || counted.checker !== 'mediapipe') return { error: NO_FACE_CHECK };
     const session = await openSession(student, sessionId);
     if (!session) return { error: 'This interview is over.' };
     const said = clean(answer, 3000);
@@ -382,7 +476,7 @@ async function answerInterview({ student, sessionId, answer, seconds, proctor })
     // neither now nor in the transcript of the next question.
     last.answer = ai.scrub(said);
     last.seconds = Math.max(0, Math.min(36000, Math.round(Number(seconds) || 0)));
-    session.proctor = addProctor(session.proctor, proctorOf(proctor));
+    session.proctor = addProctor(session.proctor, counted);
     const number = session.turns.length + 1;
     const prompt = interviewPrompt({ domain: session.domain, context, topics: session.topics, turns: session.turns, answer: said, number, difficulty: session.difficulty });
     const r = await askAI(student, prompt, { engine: session.engine || 'gemini', model: session.claudeModel || '' });
@@ -395,11 +489,11 @@ async function answerInterview({ student, sessionId, answer, seconds, proctor })
     const next = number > QUESTIONS || out.done ? '' : clean(out.question, 400);
     if (!next) {
         const report = await close(student, session, { summary: clean(out.summary, 1500), overall: mark(out.overall) ?? average(session.turns) });
-        return { score: last.score, feedback: last.feedback, question: null, number: QUESTIONS, of: QUESTIONS, done: true, report };
+        return { score: last.score, feedback: last.feedback, question: null, number: QUESTIONS, of: QUESTIONS, done: true, report, say: END_LINE };
     }
     session.turns.push({ question: next });
     await session.save();
-    return { score: last.score, feedback: last.feedback, question: next, number, of: QUESTIONS, done: false, report: null };
+    return { score: last.score, feedback: last.feedback, question: next, number, of: QUESTIONS, done: false, report: null, say: spokenLine(session, student, number, 'ack') };
 }
 
 const average = (turns) => {
@@ -408,15 +502,34 @@ const average = (turns) => {
 };
 
 /** The report from what was answered, with no AI call: the student stopped, or left one open from an earlier day. */
-async function finishSession(student, session, proctor) {
+async function finishSession(student, session, proctor, reason) {
     if (!session.turns[session.turns.length - 1].answer) session.turns.pop();
     session.proctor = addProctor(session.proctor, proctorOf(proctor));
     const n = answered(session).length;
     const overall = average(session.turns);
-    const summary = n
+    const summary = (reason ? reason + ' ' : '') + (n
         ? `You stopped after ${n} of ${QUESTIONS} questions, averaging ${overall}/10; the unanswered questions count as not attempted.`
-        : 'You stopped before answering any question.';
+        : 'You stopped before answering any question.');
     return close(student, session, { summary, overall });
+}
+
+/**
+ * The page caught the student leaving the interview window or holding a phone
+ * or notes up to the camera. Kept on the session, so a reload does not reset
+ * the count; the third warning ends the interview with what was answered.
+ */
+async function warnInterview({ student, sessionId, kind, proctor }) {
+    if (!WARNING_TEXT[kind]) return { error: 'Unknown warning.' };
+    const session = await openSession(student, sessionId);
+    if (!session) return { error: 'This interview is over.' };
+    session.warnings = (session.warnings || []).concat({ kind, at: new Date() });
+    const count = session.warnings.length;
+    if (count >= WARNINGS_TO_END) {
+        const report = await finishSession(student, session, proctor, `The interview was ended after ${WARNINGS_TO_END} warnings.`);
+        return { warnings: count, of: WARNINGS_TO_END, ended: true, report };
+    }
+    await session.save();
+    return { warnings: count, of: WARNINGS_TO_END, ended: false };
 }
 
 /** The student stops early. */
@@ -455,7 +568,7 @@ async function emailReport(student, session) {
                 name: nameOf(student),
                 bodyHtml: `<p style="margin:0 0 10px;">Level: <b>${level}</b>. Overall mark: <b style="font-size:20px;">${overall}/10</b> (${m.got} of ${m.of} across ${m.of / 10} question${m.of === 10 ? '' : 's'}).</p>` +
                     `<p style="margin:0 0 10px;"><b>What to improve before the next interview:</b> ${e(session.summary)}</p>` +
-                    `<p style="margin:0;color:#9a9080;font-size:13px;">Camera: ${e(attentionText(session.proctor))}</p>`,
+                    `<p style="margin:0;color:#9a9080;font-size:13px;">Camera: ${e(cameraLine(session))}</p>`,
                 panel: { label: 'QUESTION BY QUESTION', html: `<table cellspacing="0" cellpadding="0" style="width:100%;font-size:14px;">${rows}</table>` },
                 cta: { label: 'Open the Interview Room', url: mail.PORTAL_URL + '/meeting' },
                 footerWhy: 'You took an interview in the TEN Interview Room. The interviewer is an AI; TEN keeps a copy of your marks.'
@@ -469,6 +582,6 @@ async function emailReport(student, session) {
 }
 
 module.exports = {
-    schedule, status, startInterview, answerInterview, finishInterview, reports, aiSummary, saveAiSettings, QUESTIONS, TURNS_PER_DAY, LEVELS,
-    _internal: { interviewPrompt, topicsFor, proctorOf, addProctor, attentionText, average, engineForNew, monthStart, BUSY, ANCHOR, EVERY_DAYS, CLAUDE_COST_INR, CLAUDE_SCHEMA }
+    schedule, status, startInterview, answerInterview, finishInterview, warnInterview, reports, aiSummary, saveAiSettings, voiceOf, voiceInfo, QUESTIONS, TURNS_PER_DAY, LEVELS, WARNINGS_TO_END,
+    _internal: { interviewPrompt, topicsFor, proctorOf, addProctor, attentionText, warningText, average, engineForNew, monthStart, spokenLine, partOfDay, voiceCache, BUSY, NO_FACE_CHECK, ANCHOR, EVERY_DAYS, CLAUDE_COST_INR, CLAUDE_SCHEMA }
 };

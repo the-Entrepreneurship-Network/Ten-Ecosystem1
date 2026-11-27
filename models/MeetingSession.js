@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 /*
  * One interview in the Interview Room (services/aiMeeting.js): the level the
  * student chose, the AI that ran it, the topics it was built from, the questions the AI asked, the student's answers,
- * each score, the camera totals the page reported, and the report at the end.
+ * each score, the camera totals the page reported, the warnings, and the report at the end.
  * The student sees past reports on the page and gets each by email; the AI
  * reads the transcript so far to ask the next question.
  */
@@ -31,6 +31,9 @@ const meetingSessionSchema = new mongoose.Schema({
     // The page's running camera totals (checker, attentiveMs, awayMs, noFaceMs,
     // awayEpisodes, multiFaceEpisodes, cameraOffEpisodes), as last reported.
     proctor:    { type: mongoose.Schema.Types.Mixed, default: null },
+    // Each time the page caught the student leaving the interview window or
+    // holding a phone or notes up to the camera. The third ends the interview.
+    warnings:   { type: [new mongoose.Schema({ kind: { type: String, enum: ["left", "object"] }, at: { type: Date, default: Date.now } }, { _id: false })], default: [] },
     overall:    { type: Number, default: null },
     summary:    { type: String, default: "" },
     emailed:    { type: Boolean, default: false },

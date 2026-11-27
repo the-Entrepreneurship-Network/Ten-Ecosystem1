@@ -12,6 +12,11 @@
  *   POST /interview/answer    { sessionId, answer, seconds, proctor } → score,
  *                             feedback, next question or the report
  *   POST /interview/finish    { sessionId, proctor } → the report so far
+ *   POST /interview/warning   { sessionId, kind: 'left'|'object', proctor } → the
+ *                             count; the third ends it with the report
+ *   POST /voice               { sessionId, n, lead } or { part: 'sample'|'end' } →
+ *                             that interviewer line as MP3 in the natural voice,
+ *                             or 204: the page then uses the device's voice
  */
 
 const express = require('express');
@@ -30,7 +35,7 @@ router.get('/', async (req, res) => {
         const s = req.student;
         const on = ai.enabled();
         res.json(Object.assign({
-            success: true, enabled: on, name: name(s), domain: s.domain || '', assistant: ai.NAME, questions: meeting.QUESTIONS
+            success: true, enabled: on, name: name(s), domain: s.domain || '', assistant: ai.NAME, questions: meeting.QUESTIONS, voice: meeting.voiceInfo()
         }, on ? await meeting.status({ student: s }) : { schedule: meeting.schedule(), state: 'off', sessionId: null, levels: meeting.LEVELS, reports: [] }));
     } catch (err) {
         console.error('[ai-meeting] me failed:', err.message);
@@ -60,5 +65,19 @@ router.post('/interview/answer', answer((req) => meeting.answerInterview({
     student: req.student, sessionId: body(req).sessionId, answer: body(req).answer, seconds: body(req).seconds, proctor: body(req).proctor
 })));
 router.post('/interview/finish', answer((req) => meeting.finishInterview({ student: req.student, sessionId: body(req).sessionId, proctor: body(req).proctor })));
+router.post('/interview/warning', answer((req) => meeting.warnInterview({ student: req.student, sessionId: body(req).sessionId, kind: body(req).kind, proctor: body(req).proctor })));
+
+router.post('/voice', async (req, res) => {
+    if (!ai.enabled()) return off(res);
+    try {
+        const b = body(req);
+        const audio = await meeting.voiceOf({ student: req.student, sessionId: b.sessionId, n: b.n, lead: b.lead, part: b.part });
+        if (!audio) return res.status(204).end();
+        res.set('Cache-Control', 'private, max-age=3600').type('audio/mpeg').send(audio);
+    } catch (err) {
+        console.error('[ai-meeting] voice failed:', err.message);
+        res.status(204).end();
+    }
+});
 
 module.exports = router;
