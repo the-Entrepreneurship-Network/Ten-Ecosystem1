@@ -159,8 +159,9 @@ describe('a certificate the paid track already covers', () => {
     expect(btn).toMatch(/completion needed/);
   });
 
-  it('asks for no money once the fee is settled', () => {
-    expect(CERTS).toContain('🎉 Claim It — already paid');
+  it('asks for no money once the fee is settled: the card downloads', () => {
+    const btn = CERTS.slice(CERTS.indexOf('let actionBtn'), CERTS.indexOf('let barPct'));
+    expect(btn).toMatch(/\} else if \(paid\) \{\s*\/\/[^\n]*\n\s*actionBtn = `<button class="cert-action-btn claimed-btn" onclick="downloadCert\('\$\{type\}'\)">⬇ Download Certificate<\/button>`/);
   });
 });
 
@@ -172,19 +173,26 @@ describe('the claim route honours every way the fee can be settled', () => {
    */
   it('asks the one module rather than one store', () => {
     expect(CERT_ROUTE).toMatch(/const settled = await require\("\.\.\/\.\.\/services\/certificateEntitlement"\)\.feeSettled\(student, type\)/);
-    expect(CERT_ROUTE).toContain('if (settled.covered) {');
+    expect(CERT_ROUTE).toContain('if (settled.covered) return null;');
   });
 
   it('no longer decides on the coin redemption alone', () => {
     expect(CERT_ROUTE).not.toMatch(/if \(redemption\) \{\s*return res\.json\(/);
   });
 
+  // One release check (releaseBlock) answers for the claim, the PDF step and
+  // the download, so all three refuse the same things in the same order.
   it('refuses a certificate the student has not earned, paid or not', () => {
-    const claim = CERT_ROUTE.slice(CERT_ROUTE.indexOf('/certificates/claim/:type'));
-    const gate = claim.indexOf('You have not yet unlocked this certificate');
-    const fee  = claim.indexOf('settled.covered');
+    const gateFn = CERT_ROUTE.slice(CERT_ROUTE.indexOf('async function releaseBlock('));
+    const gate = gateFn.indexOf('You have not unlocked this certificate yet.');
+    const fee  = gateFn.indexOf('settled.covered');
     expect(gate).toBeGreaterThan(-1);
     expect(fee).toBeGreaterThan(gate);   // eligibility is checked FIRST
+    for (const route of ['/certificates/claim/:type', '/certificates/generate-pdf/:type', '/certificates/course-pdf/:type']) {
+      const at = CERT_ROUTE.indexOf(route);
+      const body = CERT_ROUTE.slice(at, CERT_ROUTE.indexOf('\nrouter.', at + 1));
+      expect(body).toContain('await releaseBlock(student, type)');
+    }
   });
 
   it('tells the screen which fees are settled', () => {

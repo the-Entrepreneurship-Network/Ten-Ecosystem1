@@ -146,9 +146,10 @@ describe('pay after completion', () => {
   });
 
   it('checks eligibility first — a bill for something you cannot have yet is the wrong answer', () => {
-    const claim = CERT_ROUTE.slice(CERT_ROUTE.indexOf('/certificates/claim/:type'));
-    expect(claim.indexOf('You have not yet unlocked this certificate'))
-      .toBeLessThan(claim.indexOf('studio.feeDue'));
+    const gate = CERT_ROUTE.slice(CERT_ROUTE.indexOf('async function releaseBlock('));
+    expect(gate.indexOf('You have not unlocked this certificate yet.')).toBeGreaterThan(-1);
+    expect(gate.indexOf('You have not unlocked this certificate yet.'))
+      .toBeLessThan(gate.indexOf('studio.feeDue'));
   });
 
   it('says so on the certificate card, not only at the download button', () => {

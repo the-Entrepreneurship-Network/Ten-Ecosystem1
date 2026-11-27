@@ -18,8 +18,12 @@ const Payment = require('../../models/Payment');
 const CoinRedemption = require('../../models/new/CoinRedemption');
 const { feeSettled, feeSettledAll, CERT_KEYS } = require('../../services/certificateEntitlement');
 
-/** The chain these routes use: findOne(...).select(...).lean() */
-const chain = (value) => ({ select: () => ({ lean: () => Promise.resolve(value), catch: () => Promise.resolve(value) }) });
+/** The chain these routes use: findOne(...).sort(...).select(...).lean() */
+const chain = (value) => {
+  const tail = { select: () => ({ lean: () => Promise.resolve(value), catch: () => Promise.resolve(value) }) };
+  return { sort: () => tail, ...tail };
+};
+const NONE = { covered: false, via: null, verifying: false };
 
 function noPayments() { Payment.findOne.mockReturnValue(chain(null)); }
 function noRedemptions() { CoinRedemption.findOne.mockReturnValue(chain(null)); }
@@ -35,25 +39,25 @@ const student = { _id: 'stu1', employeeId: 'TEN/WEB/1' };
 
 describe('a fee nobody has settled', () => {
   it('is not covered', async () => {
-    await expect(feeSettled(student, 'fellowship')).resolves.toEqual({ covered: false, via: null });
+    await expect(feeSettled(student, 'fellowship')).resolves.toEqual(NONE);
   });
 
   it('is not covered for an unknown certificate type either', async () => {
-    await expect(feeSettled(student, 'not_a_cert')).resolves.toEqual({ covered: false, via: null });
+    await expect(feeSettled(student, 'not_a_cert')).resolves.toEqual(NONE);
   });
 
   it('is not covered when there is no student', async () => {
-    await expect(feeSettled(null, 'expert')).resolves.toEqual({ covered: false, via: null });
+    await expect(feeSettled(null, 'expert')).resolves.toEqual(NONE);
   });
 });
 
 describe('a fee waived by a paid track', () => {
   // What services/tenureBenefits.js actually writes.
-  const waiver = { amount: 0, metadata: { grantedBy: 'tenure_bundle', sourceOrderId: 'ORD-1' } };
+  const waiver = { amount: 0, status: 'success', metadata: { grantedBy: 'tenure_bundle', sourceOrderId: 'ORD-1' } };
 
   it('is covered, and reported as coming from the bundle', async () => {
     Payment.findOne.mockReturnValue(chain(waiver));
-    await expect(feeSettled(student, 'fellowship')).resolves.toEqual({ covered: true, via: 'bundle' });
+    await expect(feeSettled(student, 'fellowship')).resolves.toEqual({ covered: true, via: 'bundle', verifying: false });
   });
 
   it('is looked up by the purpose the waiver is written under', async () => {
@@ -67,14 +71,19 @@ describe('a fee waived by a paid track', () => {
 });
 
 describe('a fee the student paid themselves', () => {
-  it('is covered, and is not mistaken for a bundle waiver', async () => {
-    Payment.findOne.mockReturnValue(chain({ amount: 250000, metadata: {} }));
-    await expect(feeSettled(student, 'fellowship')).resolves.toEqual({ covered: true, via: 'purchase' });
+  it('is covered once HR has approved it, and is not mistaken for a bundle waiver', async () => {
+    Payment.findOne.mockReturnValue(chain({ amount: 1000, status: 'success', metadata: {} }));
+    await expect(feeSettled(student, 'fellowship')).resolves.toEqual({ covered: true, via: 'purchase', verifying: false });
   });
 
-  it('counts a payment still awaiting verification', async () => {
-    Payment.findOne.mockReturnValue(chain({ amount: 250000 }));
-    await feeSettled(student, 'expert');
+  /*
+   * A submitted UPI reference is twelve digits anyone can type, and a PDF
+   * cannot be taken back once downloaded. Until HR approves it the student is
+   * told "verifying" — not handed the certificate, and not asked to pay again.
+   */
+  it('does not count a payment still awaiting verification, but reports it', async () => {
+    Payment.findOne.mockReturnValue(chain({ amount: 300, status: 'pending_verification' }));
+    await expect(feeSettled(student, 'expert')).resolves.toEqual({ covered: false, via: null, verifying: true });
     expect(Payment.findOne).toHaveBeenCalledWith(expect.objectContaining({
       status: { $in: ['success', 'pending_verification'] }
     }));
@@ -84,7 +93,7 @@ describe('a fee the student paid themselves', () => {
 describe('a fee redeemed with coins', () => {
   it('is covered', async () => {
     CoinRedemption.findOne.mockReturnValue(chain({ _id: 'r1' }));
-    await expect(feeSettled(student, 'expert')).resolves.toEqual({ covered: true, via: 'coins' });
+    await expect(feeSettled(student, 'expert')).resolves.toEqual({ covered: true, via: 'coins', verifying: false });
   });
 
   /*

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Get Your Certificate — TEN Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<script src="/session-guard.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#05070e;--surface:#090d1a;--card:#0e1428;
+  --gold:#D4AF37;--gold2:#b8952e;
+  --text:#F0EEE8;--muted:#9a9080;--green:#10b981;--red:#ef4444;
+  --border:rgba(212,175,55,0.12);--border-strong:rgba(212,175,55,0.3);
+}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;line-height:1.5;}
+.topbar{display:flex;align-items:center;gap:14px;padding:16px 24px;background:var(--surface);border-bottom:1px solid var(--border);}
+.back-btn{background:rgba(212,175,55,0.08);border:1px solid var(--border-strong);border-radius:10px;color:var(--gold);padding:8px 14px;font-size:13px;font-weight:700;text-decoration:none;}
+.back-btn:focus-visible,.btn:focus-visible,.copy-btn:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+main{max-width:680px;margin:0 auto;padding:32px 16px 64px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:28px;}
+.tier{display:inline-block;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;background:rgba(212,175,55,0.1);border:1px solid var(--border-strong);color:var(--gold);}
+h1{font-family:'Playfair Display',serif;font-size:clamp(26px,5vw,36px);line-height:1.2;margin:14px 0 10px;text-wrap:balance;}
+.lead{color:#cfc8b8;font-size:15px;max-width:60ch;}
+.benefits{list-style:none;display:grid;gap:14px;margin:24px 0;}
+.benefits li{display:flex;gap:14px;padding:14px;border-radius:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);}
+.benefits .ic{flex:0 0 36px;height:36px;border-radius:10px;display:grid;place-items:center;background:rgba(212,175,55,0.1);font-size:18px;}
+.benefits b{display:block;font-size:14px;margin-bottom:2px;}
+.benefits span{color:var(--muted);font-size:13px;}
+.price-box{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:18px;border-radius:14px;background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.03));border:1px solid var(--border-strong);}
+.price{font-size:34px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums;}
+.price small{display:block;font-size:12px;font-weight:600;color:var(--muted);}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:12px 22px;border:none;border-radius:12px;font:800 15px 'Plus Jakarta Sans',sans-serif;cursor:pointer;text-decoration:none;}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#0a0600;}
+.btn-gold:hover{box-shadow:0 8px 24px rgba(212,175,55,0.3);}
+.btn-ghost{background:transparent;border:1px solid var(--border-strong);color:var(--gold);}
+.btn:disabled{opacity:.6;cursor:wait;}
+.steps{margin:18px 0 0;padding-left:20px;color:var(--muted);font-size:13px;display:grid;gap:4px;}
+.pay-grid{display:grid;grid-template-columns:220px 1fr;gap:24px;align-items:start;margin-top:20px;}
+@media (max-width:600px){.pay-grid{grid-template-columns:1fr;justify-items:center;text-align:center}.card{padding:20px}}
+.qr{width:220px;height:220px;background:#fff;border-radius:14px;padding:10px;}
+.qr img{width:100%;height:100%;display:block;}
+.kv{font-size:13px;color:var(--muted);margin-top:10px;}
+.kv strong{color:var(--text);font-size:15px;}
+.upi-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;}
+.upi-id{font-family:ui-monospace,monospace;font-size:14px;color:var(--text);}
+.copy-btn{background:rgba(212,175,55,0.1);border:1px solid var(--border-strong);color:var(--gold);border-radius:8px;padding:4px 10px;font:700 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer;}
+.upi-app{margin-top:14px;}
+/* Phones open the UPI app straight from here; a desktop with a mouse scans the QR instead. */
+@media (min-width:700px) and (pointer:fine){.upi-app{display:none}}
+label{display:block;font-size:13px;font-weight:700;margin:22px 0 6px;}
+input{width:100%;min-height:48px;padding:12px 14px;border-radius:12px;border:1px solid var(--border-strong);background:#0a1222;color:var(--text);font-size:18px;letter-spacing:.08em;font-variant-numeric:tabular-nums;}
+.hint{font-size:12px;color:var(--muted);margin-top:6px;}
+.msg{margin-top:12px;font-size:14px;color:var(--red);min-height:1em;}
+.done{text-align:center;}
+.done .big{font-size:48px;}
+.note{margin-top:18px;font-size:12px;color:var(--muted);text-align:center;}
+[hidden]{display:none!important;}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back-btn" href="/my-certificates.html">← My Certificates</a>
+</div>
+
+<main>
+  <!-- Filled in by the script, one panel at a time. -->
+  <section class="card" id="panelLoading"><p class="lead">Loading your certificate…</p></section>
+
+  <!-- Step 1: what the certificate is worth -->
+  <section class="card" id="panelBenefits" hidden>
+    <span class="tier" id="bTier"></span>
+    <h1 id="bTitle"></h1>
+    <p class="lead" id="bLead"></p>
+    <ul class="benefits" id="bList"></ul>
+    <div class="price-box">
+      <div class="price"><span id="bPrice"></span><small>One-time payment · yours for good</small></div>
+      <button class="btn btn-gold" id="toPayBtn" type="button"></button>
+    </div>
+    <p class="msg" id="bMsg" role="alert"></p>
+    <ol class="steps">
+      <li>Pay by UPI: scan the QR or open your UPI app.</li>
+      <li>Enter the 12-digit UPI reference number from your payment.</li>
+      <li>Our team verifies it and your certificate unlocks here, with a notification.</li>
+    </ol>
+  </section>
+
+  <!-- Step 2: the payment -->
+  <section class="card" id="panelPay" hidden>
+    <span class="tier" id="pTier"></span>
+    <h1>Pay <span id="pAmount"></span> by UPI</h1>
+    <div class="pay-grid">
+      <div class="qr"><img id="pQr" alt=""></div>
+      <div>
+        <div class="kv">Paying to<br><strong id="pPayee"></strong></div>
+        <div class="kv">UPI ID
+          <div class="upi-row"><span class="upi-id" id="pUpi"></span>
+            <button class="copy-btn" type="button" id="copyBtn">Copy</button></div>
+        </div>
+        <div class="kv">Amount<br><strong id="pAmount2"></strong></div>
+        <a class="btn btn-ghost upi-app" id="pAppLink" href="#">Open my UPI app</a>
+      </div>
+    </div>
+    <label for="utr">12-digit UPI reference number (UTR)</label>
+    <input id="utr" inputmode="numeric" autocomplete="off" maxlength="16" placeholder="e.g. 412345678901">
+    <p class="hint">Find it in your payment app under the payment details, as “UPI Ref No”, “UTR” or “Transaction ID”.</p>
+    <p class="msg" id="pMsg" role="alert"></p>
+    <button class="btn btn-gold" id="submitBtn" type="button" style="width:100%;margin-top:6px;">I have paid — submit</button>
+    <p class="note">Pay the exact amount shown. Your UPI app shows the payee as <span id="pPayee2"></span>.</p>
+  </section>
+
+  <!-- Step 3 and every other outcome -->
+  <section class="card done" id="panelDone" hidden>
+    <div class="big" id="dIcon"></div>
+    <h1 id="dTitle"></h1>
+    <p class="lead" id="dText" style="margin:0 auto 22px;"></p>
+    <a class="btn btn-gold" id="dBtn" href="/my-certificates.html">Back to My Certificates</a>
+  </section>
+</main>
+
+<script>
+/*
+ * Buying a course certificate: what it is worth, then the payment.
+ *
+ * Everything that decides money comes from the server: whether the student
+ * earned this tier, whether they already own it, and the price (one figure in
+ * config/payment.js). The payment is UPI to the business account; the student
+ * gives back the 12-digit reference and HR approves it in the payments screen,
+ * after which My Certificates offers the download.
+ */
+const TYPE = new URLSearchParams(location.search).get('type');
+const COPY = {
+  expert: {
+    tier: 'Tier 1 · Expert Certificate',
+    title: 'You did the work. Now make it count.',
+    lead: (d) => `You have completed ${d.pct}% of your internship tasks, past the 30% that earns the Expert Certificate. Here is what it does for you.`,
+    benefits: [
+      ['✅', 'Proof anyone can check', 'Every certificate carries a unique ID and its own verification page, so a recruiter can confirm it is real in seconds.'],
+      ['💼', 'Stand out on LinkedIn', 'Add it under Licenses & Certifications and share it with your network in one tap.'],
+      ['📄', 'A resume line that says “I delivered”', 'It shows you finished real project tasks in your domain, not just watched a course.'],
+      ['♾️', 'Yours for good', 'One payment. Download it from your portal whenever you need it.']
+    ]
+  },
+  nano_degree: {
+    tier: 'Tier 2 · Nano Degree',
+    title: 'Most interns stop at 30%. You went past 70%.',
+    lead: (d) => `You have completed ${d.pct}% of your tasks. The Nano Degree is for the ones who go deep, and it tells an employer exactly that.`,
+    benefits: [
+      ['🎓', 'A credential with weight', '“Nano Degree” says depth: you finished the large majority of a real internship programme.'],
+      ['✅', 'Verifiable in seconds', 'A unique certificate ID and a verification page any recruiter can open.'],
+      ['💼', 'Built for your profile', 'Lead your LinkedIn and resume with it: it shows the follow-through recruiters look for.'],
+      ['♾️', 'Yours for good', 'One payment. Download it from your portal whenever you need it.']
+    ]
+  },
+  fellowship: {
+    tier: 'Tier 3 · Fellowship',
+    title: 'Top 10% of your cohort. This is rare.',
+    lead: (d) => `You rank in the top ${d.rank}% of your cohort. The TEN Fellowship is our highest recognition, and most students never reach this page.`,
+    benefits: [
+      ['🏆', 'Our highest recognition', 'Reserved for the top 10% of a cohort who also completed 70% of their tasks.'],
+      ['⭐', '“Fellow” on your profile', 'A title that sets you apart from everyone holding a completion certificate.'],
+      ['✅', 'Verifiable in seconds', 'A unique certificate ID and a verification page any recruiter can open.'],
+      ['♾️', 'Yours for good', 'One payment. Download it from your portal whenever you need it.']
+    ]
+  }
+};
+const $ = (id) => document.getElementById(id);
+const rupees = (n) => '₹' + Number(n).toLocaleString('en-IN');
+
+function show(id) {
+  ['panelLoading', 'panelBenefits', 'panelPay', 'panelDone'].forEach((p) => { $(p).hidden = p !== id; });
+  window.scrollTo(0, 0);
+}
+
+function done(icon, title, text, btn) {
+  $('dIcon').textContent = icon;
+  $('dTitle').textContent = title;
+  $('dText').textContent = text;
+  $('dBtn').textContent = (btn && btn.label) || 'Back to My Certificates';
+  $('dBtn').href = (btn && btn.href) || '/my-certificates.html';
+  show('panelDone');
+}
+
+async function load() {
+  if (!COPY[TYPE]) { location.replace('/my-certificates.html'); return; }
+  let d;
+  try {
+    const r = await fetch('/api/v2/certificates/my-certs', { credentials: 'same-origin' });
+    d = await r.json();
+    if (!d.success) throw new Error(d.message || 'Could not load your certificates.');
+  } catch (e) {
+    return done('⚠️', 'Something went wrong', e.message || 'Could not reach the server. Try again.');
+  }
+
+  const cert = d[TYPE] || {};
+  const fee = (d.feeSettled && d.feeSettled[TYPE]) || {};
+  if (!cert.unlocked) {
+    return done('🔒', 'Not unlocked yet', 'Keep going. This certificate opens up once you reach its requirement, and this page will be waiting.');
+  }
+  if (fee.covered) {
+    return done('🎉', 'This one is already yours', 'Download it from My Certificates.');
+  }
+  if (fee.verifying) {
+    return done('⏳', 'Payment submitted', 'Our team is verifying it. Your certificate unlocks on My Certificates as soon as it is approved.');
+  }
+  if (d.studioFeeDue) {
+    return done('💳', 'One step first', `Settle ${d.studioFeeDue.name} (${rupees(d.studioFeeDue.amount)}) and your certificates open up.`,
+      { label: 'Go to Career Studio', href: '/studio.html' });
+  }
+
+  const c = COPY[TYPE];
+  const price = d.prices && d.prices[TYPE];
+  $('bTier').textContent = c.tier;
+  $('bTitle').textContent = c.title;
+  $('bLead').textContent = c.lead({ pct: cert.completionPct || 0,
+    rank: Math.max(1, (d.fellowship && d.fellowship.cohortRankPct) || 1) });
+  $('bList').innerHTML = '';
+  c.benefits.forEach(([ic, title, text]) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<div class="ic" aria-hidden="true"></div><div><b></b><span></span></div>';
+    li.querySelector('.ic').textContent = ic;
+    li.querySelector('b').textContent = title;
+    li.querySelector('span').textContent = text;
+    $('bList').appendChild(li);
+  });
+  $('bPrice').textContent = rupees(price);
+  $('toPayBtn').textContent = `Get my certificate — ${rupees(price)}`;
+  $('toPayBtn').onclick = startPayment;
+  show('panelBenefits');
+}
+
+let order = null;
+
+async function startPayment() {
+  const btn = $('toPayBtn');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/v2/payment/initiate', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ purpose: 'cert_' + TYPE })
+    });
+    const d = await r.json();
+    if (!d.success) {
+      if (d.owned) return done('🎉', 'This one is already yours', 'Download it from My Certificates.');
+      if (d.verifying) return done('⏳', 'Payment submitted', d.message);
+      throw new Error(d.message || 'Could not start the payment.');
+    }
+    order = d;
+    $('pTier').textContent = COPY[TYPE].tier;
+    $('pAmount').textContent = rupees(d.amount);
+    $('pAmount2').textContent = rupees(d.amount);
+    $('pPayee').textContent = d.payeeName;
+    $('pPayee2').textContent = d.payeeName;
+    $('pUpi').textContent = d.upiId;
+    $('pQr').src = d.qrUrl;
+    $('pQr').alt = `UPI QR code: pay ${rupees(d.amount)} to ${d.payeeName}`;
+    // encodeURIComponent, not URLSearchParams: UPI apps read "+" literally.
+    $('pAppLink').href = 'upi://pay?pa=' + encodeURIComponent(d.upiId) + '&pn=' + encodeURIComponent(d.payeeName)
+      + '&am=' + encodeURIComponent(String(d.amount)) + '&cu=INR&tn=' + encodeURIComponent(d.note);
+    show('panelPay');
+  } catch (e) {
+    $('bMsg').textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$('copyBtn').onclick = async () => {
+  try { await navigator.clipboard.writeText($('pUpi').textContent); $('copyBtn').textContent = 'Copied'; }
+  catch (_) { $('copyBtn').textContent = 'Select and copy'; }
+};
+
+$('submitBtn').onclick = async () => {
+  const utr = $('utr').value.replace(/\s+/g, '');
+  $('pMsg').textContent = '';
+  if (!/^\d{12}$/.test(utr)) {
+    $('pMsg').textContent = 'Enter the 12-digit UPI reference number (digits only).';
+    return;
+  }
+  const btn = $('submitBtn');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/v2/payment/utr-confirm', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId: order.orderId, utr })
+    });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.message || 'Could not submit the reference number.');
+    done('✅', 'Payment submitted',
+      `Thank you. We have your UPI reference ${utr}. Our team verifies it and your certificate unlocks on My Certificates, with a notification.`);
+  } catch (e) {
+    $('pMsg').textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+load();
+</script>
+<script src="/js/db-banner.js" defer></script>
+<script src="/js/build-guard.js" defer></script>
+</body>
+</html>

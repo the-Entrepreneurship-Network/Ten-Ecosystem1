@@ -21,36 +21,15 @@ const paymentConfig       = require("../../config/payment");
 const certFile            = require("../../services/certificateFile");
 const { generateCertificateId, generateExpertCertificate, generateNanoCertificate, generateFellowshipCertificate } = require("../../services/v2/certificateService");
 
-function getCertificatePrice(type, studentTenure) {
-    const tenure = (studentTenure || "").trim().toLowerCase();
-    
-    // Standard prices
-    const standardPrices = {
-        expert: 100,
-        nano_degree: 1000,
-        fellowship: 2500
-    };
-    
-    if (type === "expert") {
-        return 100;
-    }
-    
-    const is1Week = /1[-_\s]*week/i.test(tenure) || tenure.includes("1w") || tenure.includes("1 week");
-    const is15Days = /15[-_\s]*day/i.test(tenure) || tenure.includes("15d") || tenure.includes("15 day");
-    const is1Month = /1[-_\s]*month/i.test(tenure) || tenure.includes("1m") || tenure.includes("1 month");
-
-    if (is1Week) {
-        if (type === "nano_degree") return 500;
-        if (type === "fellowship") return 1500;
-    } else if (is15Days) {
-        if (type === "nano_degree") return 800;
-        if (type === "fellowship") return 2000;
-    } else if (is1Month) {
-        if (type === "nano_degree") return 900;
-        if (type === "fellowship") return 2200;
-    }
-    
-    return standardPrices[type] || standardPrices.expert;
+/*
+ * What a course certificate costs. One flat price per tier, set in
+ * config/payment.js — the same figure the checkout charges and the QR encodes.
+ * (Tenure-based prices used to live here as a second copy; the second copy is
+ * how the card and the bill drift apart.) The tenure argument is kept so the
+ * callers need not change.
+ */
+function getCertificatePrice(type, studentTenure) { // eslint-disable-line no-unused-vars
+    return paymentConfig.CERT_PRICES[type] || paymentConfig.CERT_PRICES.expert;
 }
 
 // ── HR Auth middleware (for future admin cert routes if needed) ──
@@ -141,6 +120,108 @@ async function getCertStatus(student) {
     const fellowshipUnlocked = (cohortRankPct <= 10 && completionPct >= 70) || redeemedKeys.has('cert_fellowship');
 
     return { completionPct, cohortRankPct, daysSinceJoin, expertUnlocked, nanoDegreeUnlocked, fellowshipUnlocked };
+}
+
+const CERT_TYPES = ["expert", "nano_degree", "fellowship"];
+
+/*
+ * Why this course certificate cannot be released to this student yet, or
+ * null when it can. One answer for every route that hands one out — the PDF
+ * step had no check at all, so any signed-in student could make any tier's
+ * PDF without earning it or paying for it.
+ *
+ *   earned     completion / cohort rank (getCertStatus)
+ *   deferred   a Studio fee they chose to pay at the end
+ *   paid       an HR-approved UPI payment, a paid track, or coins
+ */
+async function releaseBlock(student, type) {
+    const status = await getCertStatus(student);
+    const unlocked = { expert: status.expertUnlocked, nano_degree: status.nanoDegreeUnlocked,
+        fellowship: status.fellowshipUnlocked }[type];
+    if (!unlocked) return { code: 403, message: "You have not unlocked this certificate yet." };
+
+    const studio = await require("../../services/studioAccess").getStudioAccess(student);
+    if (studio.feeDue) {
+        return { code: 402, studioFeeDue: studio.feeDue,
+            message: `You chose to pay after completion. Settle ${studio.feeDue.name} `
+                + `(₹${studio.feeDue.amount}) and your certificate is released straight away.` };
+    }
+
+    const settled = await require("../../services/certificateEntitlement").feeSettled(student, type);
+    if (settled.covered) return null;
+    return settled.verifying
+        ? { code: 402, verifying: true, message: "Your payment is being verified. The certificate unlocks as soon as HR approves it." }
+        : { code: 402, price: getCertificatePrice(type), checkoutUrl: `/certificate-checkout.html?type=${type}`,
+            message: `This certificate is ₹${getCertificatePrice(type)}. Get it from My Certificates.` };
+}
+
+/* Make the student's PDF for this tier, record it, and return where it is. */
+async function issueCoursePdf(student, type) {
+    let certRecord = await StudentCertificate.findOne({ studentId: student._id, certificateType: type });
+    if (!certRecord) {
+        certRecord = new StudentCertificate({ studentId: student._id, certificateType: type, domain: student.domain });
+    }
+    if (!certRecord.certificateId) {
+        certRecord.certificateId = generateCertificateId(type);
+    }
+
+    const certDir = path.join(__dirname, "../../uploads/certificates");
+    try { fs.mkdirSync(certDir, { recursive: true }); } catch (_) {}
+    const outPath = path.join(certDir, `${student._id}_${type}.pdf`);
+
+    const joining  = student.joiningDate ? new Date(student.joiningDate) : new Date();
+    const tenureDays = student.tenure === "45 Days" ? 45 : student.tenure === "1 Month" ? 30 : student.tenure === "3 Months" ? 90 : 180;
+    const endDate  = new Date(joining.getTime() + tenureDays * 24 * 3600 * 1000);
+    const fmt = d => d.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+
+    const data = {
+        studentName:   student.name,
+        domain:        student.domain,
+        tenure:        student.tenure,
+        durationText:  student.tenure,
+        startDate:     fmt(joining),
+        endDate:       fmt(endDate),
+        certificateId: certRecord.certificateId
+    };
+
+    if (type === "expert")           await generateExpertCertificate(data, outPath);
+    else if (type === "nano_degree") await generateNanoCertificate(data, outPath);
+    else if (type === "fellowship")  await generateFellowshipCertificate(data, outPath);
+
+    // The file is private (server.js turns /uploads/certificates away), so the
+    // address a student is given is the signed-in download route, never the
+    // file path. The raw path here is what made every Download a 404.
+    const pdfUrl = `/api/v2/certificates/course-pdf/${type}`;
+    certRecord.pdfUrl          = pdfUrl;
+    certRecord.issuedAt        = certRecord.issuedAt || new Date();
+    certRecord.claimedAt       = certRecord.claimedAt || new Date();
+    certRecord.paymentStatus   = "paid";
+    certRecord.verificationUrl = `${process.env.BASE_URL || ""}/cert-verify.html?id=${certRecord.certificateId}`;
+    await certRecord.save();
+
+    try {
+        const studentName =
+            (student.name || `${student.firstName || ""} ${student.lastName || ""}`.trim() || student.email || "").trim();
+        const college = (student.collegeName || student.college || "Not provided").trim();
+        const docTypeMap = { expert: "Expert Certificate", nano_degree: "Nano Degree", fellowship: "Fellowship" };
+        const docKeyMap = { expert: "expert_certificate", nano_degree: "nano_degree", fellowship: "fellowship" };
+        await DocumentHistory.logSend({
+            studentId: student._id,
+            studentName,
+            studentEmail: student.email || "",
+            employeeId: student.employeeId || "",
+            college,
+            domain: student.domain || certRecord.domain || "",
+            documentType: docTypeMap[type] || "Certificate",
+            documentKey: docKeyMap[type] || "certificate",
+            documentNumber: certRecord.certificateId,
+            sentAt: certRecord.issuedAt || new Date(),
+            sentBy: "HR Portal",
+            sentToEmail: student.email || ""
+        });
+    } catch (_) {}
+
+    return { outPath, pdfUrl, certRecord };
 }
 
 // ════════════════════════════════
@@ -435,97 +516,26 @@ router.post("/certificates/claim/:type", requireStudent, async (req, res) => {
     try {
         const type    = req.params.type;
         const student = req.student;
-        const valid   = ["expert", "nano_degree", "fellowship"];
-        if (!valid.includes(type)) return res.status(400).json({ success: false, message: "Invalid certificate type" });
+        if (!CERT_TYPES.includes(type)) return res.status(400).json({ success: false, message: "Invalid certificate type" });
 
-        const status = await getCertStatus(student);
-        const unlocked =
-            type === "expert"     ? status.expertUnlocked     :
-            type === "nano_degree"? status.nanoDegreeUnlocked :
-            type === "fellowship" ? status.fellowshipUnlocked : false;
-
-        if (!unlocked) {
-            return res.status(403).json({ success: false, message: "You have not yet unlocked this certificate" });
-        }
-
-        /*
-         * Has the fee already been settled — bought, waived with a paid track,
-         * or redeemed with coins?
-         *
-         * This used to ask about the coin redemption only, so the waiver a paid
-         * track writes was never read and a student sold a "Fellowship fee
-         * included" was still sent to Razorpay for the full ₹2,500.
-         */
-        /*
-         * A Studio fee the student chose to pay after completion.
-         *
-         * They were given the portals on the promise of settling up at the
-         * end, and this is the end. Checked after eligibility so a student who
-         * has not earned it is told that first — a bill for something you
-         * cannot have yet is the wrong answer to the wrong question.
-         */
-        const studio = await require("../../services/studioAccess").getStudioAccess(student);
-        if (studio.feeDue) {
-            return res.status(402).json({
-                success: false,
-                studioFeeDue: studio.feeDue,
-                message: `You chose to pay after completion. Settle ${studio.feeDue.name} `
-                    + `(₹${studio.feeDue.amount}) and your certificate is released straight away.`
-            });
-        }
-
-        const settled = await require("../../services/certificateEntitlement").feeSettled(student, type);
-        if (settled.covered) {
+        const block = await releaseBlock(student, type);
+        if (!block) {
+            const settled = await require("../../services/certificateEntitlement").feeSettled(student, type);
             return res.json({
                 success: true,
                 status: "payment_bypassed",
                 via: settled.via,
-                message: settled.via === 'bundle'
+                message: settled.via === "bundle"
                     ? "Included with your paid track — generating your certificate..."
                     : "Payment verified! Generating certificate..."
             });
         }
-
-        // Check for existing cert record
-        let certRecord = await StudentCertificate.findOne({ studentId: student._id, certificateType: type });
-
-        // Payment gate
-        if (!paymentConfig.PAYMENT_ENABLED) {
-            if (!certRecord) {
-                certRecord = await StudentCertificate.create({
-                    studentId:       student._id,
-                    certificateType: type,
-                    domain:          student.domain,
-                    paymentStatus:   "pending"
-                });
-            }
-            return res.json({
-                success: true,
-                status:  "payment_coming_soon",
-                message: "Payment coming soon — we will notify you by email when this is ready.",
-                paymentEnabled: false
-            });
+        if (block.code === 402 && !block.studioFeeDue) {
+            // Not paid yet: the answer is the checkout, not an error.
+            return res.json({ success: true, status: block.verifying ? "payment_verifying" : "payment_required",
+                price: block.price, checkoutUrl: block.checkoutUrl, message: block.message });
         }
-
-        // ── PAYMENT_ENABLED=true path ──
-        const Razorpay = require("razorpay");
-        const rzp = new Razorpay({ key_id: paymentConfig.RAZORPAY_KEY_ID, key_secret: paymentConfig.RAZORPAY_KEY_SECRET });
-        const price = getCertificatePrice(type, student.tenure);
-        const order = await rzp.orders.create({
-            amount:   price * 100, // in paise
-            currency: "INR",
-            receipt:  `cert_${student._id}_${type}_${Date.now()}`
-        });
-
-        res.json({
-            success:    true,
-            status:     "payment_initiated",
-            orderId:    order.id,
-            amount:     order.amount,
-            currency:   order.currency,
-            keyId:      paymentConfig.RAZORPAY_KEY_ID,
-            paymentEnabled: true
-        });
+        return res.status(block.code).json({ success: false, studioFeeDue: block.studioFeeDue, message: block.message });
     } catch (err) {
         console.error("[CERT] claim error:", err.message);
         res.status(500).json({ success: false, message: "Server error" });
@@ -538,73 +548,41 @@ router.post("/certificates/generate-pdf/:type", requireStudent, async (req, res)
     try {
         const type    = req.params.type;
         const student = req.student;
+        if (!CERT_TYPES.includes(type)) return res.status(400).json({ success: false, message: "Invalid certificate type" });
 
-        let certRecord = await StudentCertificate.findOne({ studentId: student._id, certificateType: type });
-        if (!certRecord) {
-            certRecord = new StudentCertificate({ studentId: student._id, certificateType: type, domain: student.domain });
-        }
+        const block = await releaseBlock(student, type);
+        if (block) return res.status(block.code).json({ success: false, ...block });
 
-        if (!certRecord.certificateId) {
-            certRecord.certificateId = generateCertificateId(type);
-        }
-
-        const certDir = path.join(__dirname, "../../uploads/certificates");
-        try { fs.mkdirSync(certDir, { recursive: true }); } catch (_) {}
-        const outPath = path.join(certDir, `${student._id}_${type}.pdf`);
-
-        const joining  = student.joiningDate ? new Date(student.joiningDate) : new Date();
-        const tenureDays = student.tenure === "45 Days" ? 45 : student.tenure === "1 Month" ? 30 : student.tenure === "3 Months" ? 90 : 180;
-        const endDate  = new Date(joining.getTime() + tenureDays * 24 * 3600 * 1000);
-        const fmt = d => d.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
-
-        const data = {
-            studentName:   student.name,
-            domain:        student.domain,
-            tenure:        student.tenure,
-            durationText:  student.tenure,
-            startDate:     fmt(joining),
-            endDate:       fmt(endDate),
-            certificateId: certRecord.certificateId
-        };
-
-        let result;
-        if (type === "expert")      result = await generateExpertCertificate(data, outPath);
-        else if (type === "nano_degree") result = await generateNanoCertificate(data, outPath);
-        else if (type === "fellowship")  result = await generateFellowshipCertificate(data, outPath);
-
-        const pdfUrl = `/uploads/certificates/${path.basename(outPath)}`;
-        certRecord.pdfUrl         = pdfUrl;
-        certRecord.issuedAt       = new Date();
-        certRecord.claimedAt      = new Date();
-        certRecord.paymentStatus  = paymentConfig.PAYMENT_ENABLED ? "paid" : "pending";
-        certRecord.verificationUrl = `${process.env.BASE_URL || ""}/cert-verify.html?id=${certRecord.certificateId}`;
-        await certRecord.save();
-
-        try {
-            const studentName =
-                (student.name || `${student.firstName || ""} ${student.lastName || ""}`.trim() || student.email || "").trim();
-            const college = (student.collegeName || student.college || "Not provided").trim();
-            const docTypeMap = { expert: "Expert Certificate", nano_degree: "Nano Degree", fellowship: "Fellowship" };
-            const docKeyMap = { expert: "expert_certificate", nano_degree: "nano_degree", fellowship: "fellowship" };
-            await DocumentHistory.logSend({
-                studentId: student._id,
-                studentName,
-                studentEmail: student.email || "",
-                employeeId: student.employeeId || "",
-                college,
-                domain: student.domain || certRecord.domain || "",
-                documentType: docTypeMap[type] || "Certificate",
-                documentKey: docKeyMap[type] || "certificate",
-                documentNumber: certRecord.certificateId,
-                sentAt: certRecord.issuedAt || new Date(),
-                sentBy: "HR Portal",
-                sentToEmail: student.email || ""
-            });
-        } catch (_) {}
-
+        const { pdfUrl, certRecord } = await issueCoursePdf(student, type);
         res.json({ success: true, pdfUrl, certificateId: certRecord.certificateId, verificationUrl: certRecord.verificationUrl });
     } catch (err) {
         console.error("[CERT] generate-pdf error:", err.message);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+});
+
+// GET /api/v2/certificates/course-pdf/:type
+// The student's own Expert / Nano Degree / Fellowship PDF, once it is earned
+// and paid for. Made on first download if it does not exist yet.
+router.get("/certificates/course-pdf/:type", requireStudent, async (req, res) => {
+    try {
+        const type    = req.params.type;
+        const student = req.student;
+        if (!CERT_TYPES.includes(type)) return res.status(400).json({ success: false, message: "Invalid certificate type" });
+
+        const block = await releaseBlock(student, type);
+        if (block) return res.status(block.code).json({ success: false, ...block });
+
+        let outPath = path.join(__dirname, "../../uploads/certificates", `${student._id}_${type}.pdf`);
+        if (!fs.existsSync(outPath)) outPath = (await issueCoursePdf(student, type)).outPath;
+
+        const label = { expert: "Expert-Certificate", nano_degree: "Nano-Degree", fellowship: "Fellowship" }[type];
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition",
+            `inline; filename="TEN-${label}-${String(student.employeeId || "").replace(/[^A-Za-z0-9-]/g, "-")}.pdf"`);
+        return res.sendFile(outPath);
+    } catch (err) {
+        console.error("[CERT] course-pdf error:", err.message);
         res.status(500).json({ success: false, message: "Server error" });
     }
 });
@@ -1649,3 +1627,8 @@ router.generateAndSaveCert = generateAndSaveCert;
 router.checkAndIssueCerts = checkAndIssueCerts;
 
 module.exports = router;
+// The certificate rules, for the payment routes: a certificate fee can be
+// started only by a student who has earned that certificate and not yet paid,
+// at its price.
+module.exports.releaseBlock = releaseBlock;
+module.exports.getCertificatePrice = getCertificatePrice;

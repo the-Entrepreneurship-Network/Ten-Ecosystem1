@@ -36,12 +36,18 @@ const CERT_KEYS = {
 /**
  * @param {object} student a Student document or lean object
  * @param {string} type "expert" | "nano_degree" | "fellowship"
- * @returns {Promise<{covered: boolean, via: string|null}>}
- *          via is "purchase" | "bundle" | "coins", or null when it is not covered
+ * @returns {Promise<{covered: boolean, via: string|null, verifying: boolean}>}
+ *          via is "purchase" | "bundle" | "coins", or null when it is not covered.
+ *          verifying: a UPI payment has been submitted and waits for HR.
+ *
+ * A submitted UPI reference is NOT a payment. Anyone can type twelve digits,
+ * and a certificate PDF cannot be taken back once it is downloaded, so a
+ * purchase counts only once HR has approved it ('success'). Until then the
+ * student sees "verifying", not a download.
  */
 async function feeSettled(student, type) {
     const keys = CERT_KEYS[type];
-    if (!student || !student._id || !keys) return { covered: false, via: null };
+    if (!student || !student._id || !keys) return { covered: false, via: null, verifying: false };
 
     const Payment = require('../models/Payment');
     const CoinRedemption = require('../models/new/CoinRedemption');
@@ -51,7 +57,7 @@ async function feeSettled(student, type) {
             studentId: student._id,
             purpose: keys.purpose,
             status: { $in: ['success', 'pending_verification'] }
-        }).select('metadata amount').lean().catch(() => null),
+        }).sort({ status: -1 }).select('metadata amount status').lean().catch(() => null),
         CoinRedemption.findOne({
             employeeId: student.employeeId,
             itemType: 'certificate',
@@ -60,12 +66,12 @@ async function feeSettled(student, type) {
         }).select('_id').lean().catch(() => null)
     ]);
 
-    if (payment) {
+    if (payment && payment.status === 'success') {
         const fromBundle = !!(payment.metadata && payment.metadata.grantedBy === 'tenure_bundle');
-        return { covered: true, via: fromBundle ? 'bundle' : 'purchase' };
+        return { covered: true, via: fromBundle ? 'bundle' : 'purchase', verifying: false };
     }
-    if (redemption) return { covered: true, via: 'coins' };
-    return { covered: false, via: null };
+    if (redemption) return { covered: true, via: 'coins', verifying: false };
+    return { covered: false, via: null, verifying: !!payment };
 }
 
 /** All three at once, for the screen that draws all three cards. */
