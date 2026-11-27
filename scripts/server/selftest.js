@@ -121,6 +121,29 @@ async function main() {
             ? 'class marks made by the agent: ' + nights.map((n) => n._id + ' ' + n.marked).join(', ')
             : 'no automatic class marks in the last 7 days: check the job is running';
     });
+    /*
+     * The course certificates (My Certificates). Two things a student hits:
+     * the PDF they download is made on this server, so make one; and a paid
+     * certificate waits for an admin, who has promised to approve it within
+     * 24 hours, so say how many are waiting and for how long.
+     */
+    await check('course certificates', async () => {
+        const out = path.join(require('os').tmpdir(), `.selftest-cert-${process.pid}.pdf`);
+        await require(path.join(ROOT, 'services/v2/certificateService')).generateExpertCertificate({
+            studentName: 'Self Test', domain: 'Web Development', tenure: '1 Month', durationText: '1 Month',
+            startDate: '1 November 2026', endDate: '1 December 2026', certificateId: 'TEN-SELFTEST'
+        }, out);
+        const bytes = fs.statSync(out).size;
+        fs.unlinkSync(out);
+        if (bytes < 1000) throw new Error('the certificate PDF came out empty');
+
+        const Payment = require(path.join(ROOT, 'models/Payment'));
+        const waiting = await Payment.find({ purpose: /^cert_/, status: 'pending_verification' })
+            .select('updatedAt').sort({ updatedAt: 1 }).lean();
+        const oldest = waiting.length ? Math.floor((Date.now() - new Date(waiting[0].updatedAt)) / 36e5) : 0;
+        return `a PDF can be made (${Math.round(bytes / 1024)} KB); ${waiting.length} payment(s) waiting for admin approval`
+            + (waiting.length ? `, oldest ${oldest}h${oldest >= 24 ? ' (PAST the 24 hours promised: approve in the admin portal, Payments)' : ''}` : '');
+    });
     await mongoose.disconnect().catch(() => {});
 
     const failed = results.filter((r) => !r.ok);
