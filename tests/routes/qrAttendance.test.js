@@ -28,10 +28,22 @@ const route = routeOf('app.post("/qr-attendance/mark"');
 
 test('the password is checked against the hash, not looked up as a value', () => {
   expect(route).not.toMatch(/Student\.findOne\(\{\s*employeeId,\s*password\s*\}\)/);
-  expect(route).toMatch(/Student\.findOne\(\{ employeeId: String\(employeeId\) \}\)/);
+  expect(route).toMatch(/loginIdentity\.findStudentByEmployeeId\(Student, loginId\)/);
   expect(route).toMatch(/bcrypt\.compare\(String\(password\), student\.password/);
   expect(route).toMatch(/checkLockout\(res, student, Student\)/);
   expect(route).toMatch(/recordFailedAttempt\(res, student, Student,/);
+});
+
+test('the scan page takes what the dashboard sign-in takes: an email or an Employee ID, however it is typed', () => {
+  // /login accepts either and tolerates case and separators; the scan page
+  // looked the Employee ID up exactly as stored, so an email, or ten/web/1001,
+  // was "Invalid Employee ID or Password" here and fine on the dashboard.
+  expect(route).toMatch(/const loginId = String\(employeeId\)\.trim\(\)/);
+  expect(route).toMatch(/loginIdentity\.looksLikeEmail\(loginId\)\s*\?\s*await loginIdentity\.findStudentByEmail\(Student, loginId\)\s*:\s*await loginIdentity\.findStudentByEmployeeId\(Student, loginId\)/);
+  expect(route).not.toMatch(/Student\.findOne\(\{ employeeId/);
+  expect(routeOf('app.post("/login"')).toMatch(/loginIdentity\.findStudentByEmployeeId\(Student, loginId\)/);
+  const page = read('public/qr-attendance.html');
+  expect(page).toMatch(/<label for="employeeId">Employee ID or email<\/label>/);
 });
 
 test('every scan signs in: a domain, Employee ID and password, through the sign-in limiters', () => {

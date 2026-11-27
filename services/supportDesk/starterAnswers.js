@@ -431,5 +431,24 @@ module.exports = [
             'is it offline', 'where is the internship location'
         ],
         answer: "It's a virtual internship: everything happens online through the portal, and you work from home."
+    },
+    {
+        key: 'qr-attendance',
+        question: 'How do I mark attendance with the meeting QR code?',
+        examples: [
+            'how to mark attendance with qr code', 'qr code attendance not working', 'scanned the qr code but it says invalid employee id or password',
+            'qr attendance says invalid employee id', 'attendance qr code login failed', 'qr code shared in the meeting is not accepting my password',
+            'i cannot mark my attendance through the qr code', 'qr scan attendance error', 'meeting qr code attendance issue',
+            'the qr code page says invalid employee id or password'
+        ],
+        answer: 'Scanning the meeting QR code opens a page that marks the day on your side and your coordinator\'s in one go. ' +
+            'Choose your domain, then sign in with the same details you use for your dashboard: your Employee ID ' +
+            '(like TEN/WEB/1005) or your email address, and your portal password. Then "Open today\'s attendance form" ' +
+            'appears: fill it in as usual.\n\n' +
+            'If it says "Invalid Employee ID or Password", the password is not the one your dashboard accepts. Sign in to ' +
+            'your dashboard once to check it, and use "Forgot password" on the sign-in page if you need a new one. Your ' +
+            'Member ID is not a sign-in: use your Employee ID or email.\n\n' +
+            'You can always mark the day from your dashboard instead: open Attendance, fill in the Google Form, click ' +
+            '"Confirm Form Submitted" and then "Mark Today\'s Attendance".'
     }
 ];
