@@ -227,12 +227,19 @@ module.exports = [
             'how does attendance work', 'how to mark attendance', 'my attendance is not marked', 'attendance system',
             'attendance kaise lagaye', 'what is the attendance rule', 'is attendance compulsory', 'attendance percentage',
             'how to fill the attendance form', 'where is the attendance form', 'i want to fill the attendance form',
-            'who fills the attendance form details', 'attendance google form'
+            'who fills the attendance form details', 'attendance google form',
+            'i attended the class but portal shows absent', 'attended today but marked absent',
+            'my attendance shows absent', 'present in class but absent on portal',
+            'why is coordinator attendance absent'
         ],
         answer: "Attendance is marked every day from Monday to Saturday (Sundays don't count). On your dashboard, open " +
             '🪪 Attendance:\n' +
             '1. Click "Open Official Google Form", fill it in and submit it, then click "✓ Confirm Form Submitted".\n' +
             '2. Click "Mark Today\'s Attendance".\n\n' +
+            'Joining a class does not mark your attendance by itself: you need to do both steps every day. In your ' +
+            'attendance history, the Self column turns Present as soon as you click "Mark Today\'s Attendance". The ' +
+            'Coordinator column is filled in by your coordinator after they check the day, so it can show Absent ' +
+            'for a while.\n\n' +
             'Keep your attendance above 75%, because your Letter of Completion needs it. The attendance panel shows your ' +
             'percentage and how many more days you need.'
     },
