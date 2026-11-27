@@ -2,7 +2,6 @@
 
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose');
 
 const Student = require('../../models/Student');
 const CoinRedemption = require('../../models/new/CoinRedemption');
@@ -78,42 +77,17 @@ const CATALOG_LOOKUP = Object.fromEntries(
     [...MENTORSHIP_CATALOG, ...CERTIFICATE_CATALOG].map(item => [item.key, item])
 );
 
-// Helper: Extract & Validate Student from Request
+// Helper: the signed-in student, or null.
 //
-// The session is asked first. This used to start from an `x-employee-id`
-// header the page read out of localStorage — a value session-guard.js deletes
-// whenever any call 401s, which is how the same pattern produced an
-// inescapable sign-in loop elsewhere in the portal.
+// It used to fall back to an `x-employee-id` header (or an employeeId in the
+// body or query string), and with none of those to the most recently updated
+// student in the database. So anyone could read another student's coin
+// balance, or spend it: checkout, verify-payment and redeem-booster all acted
+// on whoever this returned. The session alone says who is asking. Every page
+// that calls these routes is a signed-in student page, and every route here
+// already answers 401 "Please sign in" when this is null.
 const { findSessionStudent } = require('../../middleware/sessionAuth');
-
-async function _getStudentFromReq(req) {
-    const fromSession = await findSessionStudent(req);
-    if (fromSession) return fromSession;
-
-    const empId = (
-        req.headers['x-employee-id'] ||
-        (req.body && req.body.employeeId) ||
-        (req.query && req.query.employeeId) ||
-        (req.user && req.user.employeeId) ||
-        ''
-    ).trim();
-
-    let student = null;
-
-    if (empId) {
-        student = await Student.findOne({ employeeId: empId });
-        if (!student && mongoose.Types.ObjectId.isValid(empId)) {
-            student = await Student.findById(empId);
-        }
-    }
-
-    // Fallback: search for first/most recent active student in DB if empId header wasn't sent
-    if (!student) {
-        student = await Student.findOne().sort({ updatedAt: -1 });
-    }
-
-    return student;
-}
+const _getStudentFromReq = findSessionStudent;
 
 // ─────────────────────────────────────────────────────────────
 // 1. GET /api/v2/marketplace/catalog — Fetch Catalog & Student Balance
