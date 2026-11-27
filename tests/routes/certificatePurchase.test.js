@@ -27,6 +27,7 @@ function mount({ session = ME, block = NEEDS_PAYMENT('expert'), payments = [] } 
     jest.resetModules();
     const rows = payments.map((p) => ({ ...p }));
     const created = [];
+    const seen = { mails: [], hrNotices: 0, listFilter: null };
     const withSave = (row) => Object.assign(row, { async save() { return this; } });
     const matches = (q) => (r) => Object.entries(q).every(([k, v]) => {
         if (v && typeof v === 'object' && '$in' in v) return v.$in.includes(r[k]);
@@ -43,16 +44,17 @@ function mount({ session = ME, block = NEEDS_PAYMENT('expert'), payments = [] } 
 
     jest.doMock('../../models/Payment', () => ({
         findOne: (q) => query(q),
+        find: (q) => { seen.listFilter = q; return { sort: () => ({ populate: async () => rows }) }; },
         create: async (doc) => { const row = withSave({ _id: 'pay' + (rows.length + 1), ...doc }); rows.push(row); created.push(row); return row; }
     }));
     jest.doMock('../../models/Student', () => ({ findOne: async () => null, findById: async () => null }));
-    jest.doMock('../../models/Notification', () => function Notification() { this.save = async () => {}; });
+    jest.doMock('../../models/Notification', () => function Notification() { seen.hrNotices += 1; this.save = async () => {}; });
     jest.doMock('../../middleware/sessionAuth', () => ({
         findSessionStudent: async () => session,
-        requireHR: (req, res, next) => next()
+        requireHR: (req, res, next) => { req.hrUser = { username: 'hr1' }; next(); }
     }));
     jest.doMock('../../utils/mailer', () => ({
-        createEmailTransporter: () => ({ sendMail: async () => {} }), EMAIL_FROM: 'x', HR_NOTIFY_EMAIL: 'hr@example.com'
+        createEmailTransporter: () => ({ sendMail: async (m) => { seen.mails.push(m); } }), EMAIL_FROM: 'x', HR_NOTIFY_EMAIL: 'hr@example.com'
     }));
     jest.doMock('../../routes/v2/certificates', () => ({
         releaseBlock: async () => block,
@@ -62,7 +64,7 @@ function mount({ session = ME, block = NEEDS_PAYMENT('expert'), payments = [] } 
     const app = express();
     app.use(express.json());
     app.use('/api/v2/payment', require('../../routes/v2/payment'));
-    return { app, rows, created };
+    return { app, rows, created, seen };
 }
 
 describe('starting a certificate payment', () => {
@@ -162,5 +164,35 @@ describe('confirming a certificate payment with its UPI reference', () => {
             .send({ utr: '412345678901', amount: 1, description: 'cert_expert' });
         expect(r.status).toBe(400);
         expect(created).toHaveLength(0);
+    });
+});
+
+describe('certificate payments are approved in the admin portal, not by HR', () => {
+    const submitted = () => ({ orderId: 'CERT-1', studentId: ME._id, purpose: 'cert_expert', status: 'pending_verification',
+        txnUtr: '412345678901', amount: 300 });
+
+    it('HR cannot approve one', async () => {
+        const { app, rows } = mount({ payments: [submitted()] });
+        const r = await request(app).post('/api/v2/payment/hr-verify').send({ orderId: 'CERT-1', approve: true });
+        expect(r.status).toBe(403);
+        expect(r.body.message).toMatch(/admin portal/);
+        expect(rows[0].status).toBe('pending_verification');
+    });
+
+    it("HR's payment list leaves them out", async () => {
+        const { app, seen } = mount();
+        await request(app).get('/api/v2/payment/hr-all-payments');
+        expect(seen.listFilter).toEqual({ purpose: { $nin: ['cert_expert', 'cert_nano_degree', 'cert_fellowship'] } });
+    });
+
+    it('the "verify this payment" email points to the admin portal and the 24 hours, and HR gets no bell', async () => {
+        const open = { orderId: 'CERT-2', studentId: ME._id, purpose: 'cert_nano_degree', status: 'pending', amount: 500 };
+        const { app, seen } = mount({ payments: [open], block: NEEDS_PAYMENT('nano_degree') });
+        const r = await request(app).post('/api/v2/payment/utr-confirm').send({ orderId: 'CERT-2', utr: '512345678901' });
+        expect(r.status).toBe(200);
+        expect(seen.mails).toHaveLength(1);
+        expect(seen.mails[0].subject).toBe('Nano Degree payment to verify (within 24 hours) - CERT-2');
+        expect(seen.mails[0].html).toContain('in the admin portal, under Payments, within 24 hours');
+        expect(seen.hrNotices).toBe(0);
     });
 });

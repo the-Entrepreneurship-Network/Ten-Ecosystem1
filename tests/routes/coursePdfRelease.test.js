@@ -14,7 +14,7 @@
  * signed-in student could make any tier's PDF without earning it or paying.
  *
  * Both now go through one release check: earned, no deferred Studio fee, and
- * paid (an HR-approved UPI payment, a paid track, or coins).
+ * paid (an admin-approved UPI payment, a paid track, or coins).
  */
 
 const fs = require('fs');

@@ -82,7 +82,7 @@ input{width:100%;min-height:48px;padding:12px 14px;border-radius:12px;border:1px
     <ol class="steps">
       <li>Pay by UPI: scan the QR or open your UPI app.</li>
       <li>Enter the 12-digit UPI reference number from your payment.</li>
-      <li>Our team verifies it and your certificate unlocks here, with a notification.</li>
+      <li>We verify it within 24 hours and email you. The download then opens on My Certificates.</li>
     </ol>
   </section>
 
@@ -126,7 +126,8 @@ input{width:100%;min-height:48px;padding:12px 14px;border-radius:12px;border:1px
  * Everything that decides money comes from the server: whether the student
  * earned this tier, whether they already own it, and the price (one figure in
  * config/payment.js). The payment is UPI to the business account; the student
- * gives back the 12-digit reference and HR approves it in the payments screen,
+ * gives back the 12-digit reference and an admin approves it (admin portal,
+ * Payments) within 24 hours; the student is emailed,
  * after which My Certificates offers the download.
  */
 const TYPE = new URLSearchParams(location.search).get('type');
@@ -202,7 +203,7 @@ async function load() {
     return done('🎉', 'This one is already yours', 'Download it from My Certificates.');
   }
   if (fee.verifying) {
-    return done('⏳', 'Payment submitted', 'Our team is verifying it. Your certificate unlocks on My Certificates as soon as it is approved.');
+    return done('⏳', 'Payment submitted', 'We verify payments within 24 hours. You will get an email when it is approved, and the download opens on My Certificates.');
   }
   if (d.studioFeeDue) {
     return done('💳', 'One step first', `Settle ${d.studioFeeDue.name} (${rupees(d.studioFeeDue.amount)}) and your certificates open up.`,
@@ -290,7 +291,7 @@ $('submitBtn').onclick = async () => {
     const d = await r.json();
     if (!d.success) throw new Error(d.message || 'Could not submit the reference number.');
     done('✅', 'Payment submitted',
-      `Thank you. We have your UPI reference ${utr}. Our team verifies it and your certificate unlocks on My Certificates, with a notification.`);
+      `Thank you. We have your UPI reference ${utr}. We verify it within 24 hours and email you when it is approved; the download then opens on My Certificates.`);
   } catch (e) {
     $('pMsg').textContent = e.message;
   } finally {

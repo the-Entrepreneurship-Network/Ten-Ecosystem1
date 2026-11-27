@@ -132,7 +132,7 @@ const CERT_TYPES = ["expert", "nano_degree", "fellowship"];
  *
  *   earned     completion / cohort rank (getCertStatus)
  *   deferred   a Studio fee they chose to pay at the end
- *   paid       an HR-approved UPI payment, a paid track, or coins
+ *   paid       an admin-approved UPI payment, a paid track, or coins
  */
 async function releaseBlock(student, type) {
     const status = await getCertStatus(student);
@@ -150,7 +150,7 @@ async function releaseBlock(student, type) {
     const settled = await require("../../services/certificateEntitlement").feeSettled(student, type);
     if (settled.covered) return null;
     return settled.verifying
-        ? { code: 402, verifying: true, message: "Your payment is being verified. The certificate unlocks as soon as HR approves it." }
+        ? { code: 402, verifying: true, message: "Your payment is being verified (within 24 hours). You will get an email when it is approved, and the download opens on My Certificates." }
         : { code: 402, price: getCertificatePrice(type), checkoutUrl: `/certificate-checkout.html?type=${type}`,
             message: `This certificate is ₹${getCertificatePrice(type)}. Get it from My Certificates.` };
 }

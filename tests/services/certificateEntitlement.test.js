@@ -71,14 +71,14 @@ describe('a fee waived by a paid track', () => {
 });
 
 describe('a fee the student paid themselves', () => {
-  it('is covered once HR has approved it, and is not mistaken for a bundle waiver', async () => {
+  it('is covered once an admin has approved it, and is not mistaken for a bundle waiver', async () => {
     Payment.findOne.mockReturnValue(chain({ amount: 1000, status: 'success', metadata: {} }));
     await expect(feeSettled(student, 'fellowship')).resolves.toEqual({ covered: true, via: 'purchase', verifying: false });
   });
 
   /*
    * A submitted UPI reference is twelve digits anyone can type, and a PDF
-   * cannot be taken back once downloaded. Until HR approves it the student is
+   * cannot be taken back once downloaded. Until an admin approves it the student is
    * told "verifying" — not handed the certificate, and not asked to pay again.
    */
   it('does not count a payment still awaiting verification, but reports it', async () => {

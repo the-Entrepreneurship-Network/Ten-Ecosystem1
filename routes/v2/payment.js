@@ -769,26 +769,32 @@ router.post('/utr-confirm', async (req, res) => {
         const sDomain = domain || student.domain;
         const sEmail = email || student.email;
 
+        const certLabel = CERT_PURPOSES[payment.purpose] && CERT_PURPOSES[payment.purpose].label;
         transporter.sendMail({
           // EMAIL_FROM, not EMAIL_USER — the mailer accepts SMTP_USER too, and a
           // bare address with no display name is the first thing a spam filter
           // holds against a payment notice.
           from: EMAIL_FROM,
           to: HR_NOTIFY_EMAIL,
-          subject: `Manual Payment Verification Required - ${payment.orderId}`,
+          subject: certLabel
+            ? `${certLabel} payment to verify (within 24 hours) - ${payment.orderId}`
+            : `Manual Payment Verification Required - ${payment.orderId}`,
           html: `<p>A manual UPI payment has been initiated by <strong>${sName}</strong> (${empId}, ${sDomain}).</p>
                  <p><strong>Order ID:</strong> ${payment.orderId}</p>
                  <p><strong>UTR / Transaction ID:</strong> ${utr}</p>
                  <p><strong>Amount:</strong> ₹${payment.amount}</p>
                  <p><strong>Purpose:</strong> ${payment.purpose}</p>
                  <p><strong>Student Email:</strong> ${sEmail}</p>
-                 <p>Please log in to the HR / admin portal to verify and approve this payment.</p>`
+                 <p>${certLabel
+                   ? 'Approve or reject it in the admin portal, under Payments, within 24 hours. The student is emailed when it is approved, and the download opens on My Certificates.'
+                   : 'Please log in to the HR / admin portal to verify and approve this payment.'}</p>`
         }).catch(err => console.log('Background email error:', err.message));
       } catch (mailErr) {
         console.log('[PAYMENT] Verification email handled with simulated fallback.');
       }
 
-    try {
+    // HR's bell, for the payments HR approves; certificates go to the admin portal.
+    if (!CERT_PURPOSES[payment.purpose]) try {
       await new Notification({
         title:            '💳 Payment Confirmation Received',
         message:          `Student ${student.employeeId} submitted UTR ${utr} for ₹${payment.amount}. Please verify.`,
@@ -823,7 +829,8 @@ router.get('/my-payments', async (req, res) => {
 // GET /api/v2/payment/hr-all-payments
 router.get('/hr-all-payments', requireHR, async (req, res) => {
   try {
-    const payments = await Payment.find({}).sort({ createdAt: -1 })
+    // Certificate payments are approved in the admin portal (Payments), not here.
+    const payments = await Payment.find({ purpose: { $nin: Object.keys(CERT_PURPOSES) } }).sort({ createdAt: -1 })
       .populate('studentId', 'name email employeeId domain');
     return res.json({ success: true, total: payments.length, payments });
   } catch (err) {
@@ -847,6 +854,10 @@ router.post('/hr-verify', requireHR, async (req, res) => {
     const payment = await Payment.findOne({ orderId });
     if (!payment) {
       return res.status(404).json({ success: false, message: 'Payment record not found' });
+    }
+    if (CERT_PURPOSES[payment.purpose]) {
+      return res.status(403).json({ success: false,
+        message: 'Certificate payments are approved in the admin portal, under Payments.' });
     }
 
     if (payment.status === 'success' && approve) {

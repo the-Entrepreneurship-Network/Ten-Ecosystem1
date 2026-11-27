@@ -42,7 +42,7 @@ const CERT_KEYS = {
  *
  * A submitted UPI reference is NOT a payment. Anyone can type twelve digits,
  * and a certificate PDF cannot be taken back once it is downloaded, so a
- * purchase counts only once HR has approved it ('success'). Until then the
+ * purchase counts only once an admin has approved it ('success'). Until then the
  * student sees "verifying", not a download.
  */
 async function feeSettled(student, type) {

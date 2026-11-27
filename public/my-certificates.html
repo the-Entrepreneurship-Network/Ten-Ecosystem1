@@ -323,7 +323,7 @@ function renderCerts(d) {
      */
     const paid     = certInfo?.feeSettled?.covered || d.feeSettled?.[type]?.covered || false;
     const paidVia  = certInfo?.feeSettled?.via || d.feeSettled?.[type]?.via || null;
-    // A UPI payment submitted and waiting for HR: not paid yet, not "buy" either.
+    // A UPI payment submitted and waiting for the admin: not paid yet, not "buy" either.
     const verifying = !paid && !!(certInfo?.feeSettled?.verifying || d.feeSettled?.[type]?.verifying);
     const planName = d.planName || '';
     /* A Studio fee the student chose to pay after completion. Said on the card
@@ -372,7 +372,7 @@ function renderCerts(d) {
       actionBtn = `<button class="cert-action-btn claimed-btn" onclick="downloadCert('${type}')">⬇ Download Certificate</button>`;
     } else if (verifying) {
       actionBtn = `<button class="cert-action-btn locked reserved" disabled>⏳ Payment submitted — verifying</button>
-        <div class="cert-verify-note">HR is checking your payment. Your certificate unlocks here as soon as it is approved.</div>`;
+        <div class="cert-verify-note">We verify payments within 24 hours. You will get an email when it is approved, and the download opens here.</div>`;
     } else {
       // Earned, not paid: the benefits page first, then the payment.
       actionBtn = `<button class="cert-action-btn claim-btn" onclick="location.href='/certificate-checkout.html?type=${type}'">🎉 Get your certificate — ₹${price}</button>`;
