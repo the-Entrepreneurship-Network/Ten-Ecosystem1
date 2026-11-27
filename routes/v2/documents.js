@@ -18,6 +18,7 @@ const DocumentHistory     = require("../../models/DocumentHistory");
 const MailHistory         = require("../../models/MailHistory");
 const Notification        = require("../../models/Notification");
 const { generateDocumentNumber, normalizeDocumentNumber } = require("../../utils/documentNumber");
+const { replaceStoredFile } = require("../../utils/replaceStoredFile");
 
 // ── Multer storage for documents ──
 const uploadsDir = path.join(__dirname, "../../uploads/documents");
@@ -346,9 +347,7 @@ router.post("/documents/upload-address-proof", requireStudent, (req, res, next) 
         if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
         let doc = await StudentDocument.findOne({ studentId: req.student._id });
         if (!doc) doc = new StudentDocument({ studentId: req.student._id });
-        if (doc.addressProofUrl && fs.existsSync(doc.addressProofUrl)) {
-            try { fs.unlinkSync(doc.addressProofUrl); } catch (_) {}
-        }
+        replaceStoredFile(doc.addressProofUrl, req.file.path);
         doc.addressProofUrl = req.file.path;
         if (doc.uploadStatus === "rejected") doc.uploadStatus = "not_uploaded";
         await doc.save();
@@ -385,9 +384,7 @@ router.post("/documents/upload-marksheet", requireStudent, (req, res, next) => {
         if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
         let doc = await StudentDocument.findOne({ studentId: req.student._id });
         if (!doc) doc = new StudentDocument({ studentId: req.student._id });
-        if (doc.marksheetUrl && fs.existsSync(doc.marksheetUrl)) {
-            try { fs.unlinkSync(doc.marksheetUrl); } catch (_) {}
-        }
+        replaceStoredFile(doc.marksheetUrl, req.file.path);
         doc.marksheetUrl = req.file.path;
         if (doc.uploadStatus === "rejected") doc.uploadStatus = "not_uploaded";
         await doc.save();
