@@ -3950,6 +3950,11 @@ try{
                 if (user.role === 'student') {
                     const profile = await StudentProfile.findOne({ userId: user._id });
                     if (profile) verificationStatus = profile.verificationStatus || 'pending';
+                    // No profile and no internship record is a sign-up that
+                    // stopped part way, not one waiting for HR. Saying "Pending
+                    // Approval" meant waiting for an approval nobody could
+                    // give; let it reach "finish your registration" below.
+                    else if (!(await loginIdentity.findStudentByEmail(Student, user.email))) verificationStatus = 'unfinished';
                 } else if (user.role === 'founder') {
                     const profile = await FounderProfile.findOne({ userId: user._id });
                     if (profile) verificationStatus = profile.verificationStatus || 'pending';
@@ -8937,7 +8942,11 @@ app.post("/auth/reset-password", async(req,res)=>{
 
         const Models = { student: Student, coordinator: Coordinator, hr: HR };
         const Model = Models[role];
-        const user = await Model.findOne({ passwordResetToken: token });
+        let user = await Model.findOne({ passwordResetToken: token });
+        // A student with no internship record yet (sign-up stopped part way)
+        // has only the account row, and that is where forgot-password put the
+        // token (_findUserByRoleEmail falls back to it).
+        if(!user && role === "student") user = await EcosystemUser.findOne({ passwordResetToken: token });
         if(!user) return res.json({ success:false, message:"Invalid or already-used reset link" });
         if(!user.passwordResetExpiry || user.passwordResetExpiry < new Date()){
             return res.json({ success:false, message:"This reset link has expired. Please request a new one." });

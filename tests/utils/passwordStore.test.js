@@ -41,6 +41,12 @@ describe('setStudentPassword', () => {
         expect(await bcrypt.compare('a-new-password', hash)).toBe(true);
     });
 
+    it('uses up the reset link on the account row too', async () => {
+        // A student with no internship record keeps the reset token there.
+        await setStudentPassword('ana@example.org', 'pw12345678');
+        expect(calls.eco[0].update.$unset).toEqual({ passwordResetToken: '', passwordResetExpiry: '' });
+    });
+
     it('updates EVERY student row for that email, not one', async () => {
         // A two-domain student has two rows sharing one password; a
         // findOne().save() leaves half the account on the old hash.

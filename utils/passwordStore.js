@@ -47,7 +47,10 @@ async function setStudentPassword(email, plain) {
             $set: { password: hash },
             $unset: { passwordResetToken: '', passwordResetExpiry: '' }
         }),
-        EcosystemUser.updateMany({ email: rx }, { $set: { password: hash } })
+        EcosystemUser.updateMany({ email: rx }, {
+            $set: { password: hash },
+            $unset: { passwordResetToken: '', passwordResetExpiry: '' }
+        })
     ]);
 
     const students = (s && (s.modifiedCount ?? s.nModified)) || 0;
