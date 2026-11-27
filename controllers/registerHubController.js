@@ -386,6 +386,7 @@ const { generateEmployeeId } = require('../utils/employeeId');
 const { normalizeDomain } = require('../config/domains');
 const { isValidTenure, getTenureLabel } = require('../utils/tenure');
 const { findStudentByEmail } = require('../services/loginIdentity');
+const { cleanSignupRef } = require('../utils/signupRef');
 
 /**
  * Parse the domain selection, which the form sends as a comma-joined string.
@@ -684,7 +685,9 @@ async function registerUser(req, res) {
         collegeName: roleSpecificData.university || "",
         college: roleSpecificData.university || "",
         tenure: tenureValue,
-        joiningDate: new Date().toISOString().split('T')[0]
+        joiningDate: new Date().toISOString().split('T')[0],
+        // The link that brought them (/register?ref=…); undefined when none.
+        signupRef: cleanSignupRef(req.body.ref)
       });
       studentDocId = legacyStudent && legacyStudent._id;
       createdStudentId = studentDocId;

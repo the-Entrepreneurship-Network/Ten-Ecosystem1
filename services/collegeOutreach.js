@@ -28,6 +28,7 @@ const CollegeContact = require('../models/CollegeContact');
 const quota = require('./growthQuota');
 const { hasMx } = require('./collegeDiscovery');
 const tracking = require('./growthTracking');
+const { cleanSignupRef } = require('../utils/signupRef');
 
 /** Same throttle as every other bulk send in this app. */
 const THROTTLE_MS = parseInt(process.env.GROWTH_SEND_THROTTLE_MS, 10) || 2000;
@@ -45,6 +46,21 @@ function getTransporter() {
 
 /** The college's own unsubscribe link — a different kind, a different route. */
 const unsubscribeUrl = (id) => `${BASE}/g/cu/${id}/${tracking.sign('cu', id)}`;
+
+/**
+ * The ?ref= label on this college's link, so the students it sends are counted
+ * to it in Growth OS (GET /api/growth/signup-sources): college-iitb.ac.in.
+ *
+ * ponytail: the website's host, else the address's domain. A placement cell
+ * that writes from Gmail lands in college-gmail.com with every other one.
+ */
+function refFor(contact) {
+    let host = '';
+    const site = String(contact.website || '').trim();
+    try { if (site) host = new URL(/^https?:\/\//i.test(site) ? site : 'https://' + site).hostname; } catch (_) { /* not a URL */ }
+    host = (host || String(contact.email || '').split('@')[1] || '').replace(/^www\./i, '');
+    return (host && cleanSignupRef('college-' + host)) || 'college-letter';
+}
 
 const WHAT_WE_OFFER = [
     ['Structured internships', 'Six weeks, a coordinator, weekly tasks, attendance that counts — not a certificate mill.'],
@@ -78,7 +94,7 @@ function buildHtml(contact) {
              <p style="margin:0 0 14px;">If it is useful, we can send a one-page brief you can circulate,
              or set up a short call to walk your team through how the programme runs.</p>`,
         panel: { label: 'WHAT WE RUN', html: offerHtml() },
-        cta: { label: 'See the programme →', url: BASE + '/overview' },
+        cta: { label: 'See the programme →', url: BASE + '/overview?ref=' + refFor(contact) },
         note: `Not the right person here? <a href="${unsubscribeUrl(contact._id)}" style="color:#cdb24a;">Remove this address</a> and we will not write again.`,
         footerWhy: 'You are receiving this because your institution publishes this address as its placement contact.'
     });
@@ -334,6 +350,6 @@ async function resumeInterrupted() {
     return { resumed: waiting };
 }
 
-module.exports = { run, sendOne, buildHtml, unsubscribeUrl, partitionByDeliverability,
+module.exports = { run, sendOne, buildHtml, refFor, unsubscribeUrl, partitionByDeliverability,
                    sendStatus, resumeInterrupted,
                    SUBJECT, THROTTLE_MS, DEFAULT_BATCH };

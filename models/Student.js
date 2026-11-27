@@ -128,6 +128,10 @@ const studentsSchema = new mongoose.Schema({
     joinerTypeSelected:   { type: Boolean, default: false },
     joinerType:           { type: String, enum: ['new', 'whatsapp', null], default: null },
 
+    // Which link brought this sign-up (/register?ref=…), cleaned by
+    // utils/signupRef.js. Counted by GET /api/growth/signup-sources.
+    signupRef:            { type: String },
+
     /*
      * Every time HR has sent this student back through the joiner wizard.
      *

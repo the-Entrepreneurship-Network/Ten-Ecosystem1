@@ -169,6 +169,7 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <script src="/tailwind-guard.js" defer></script>
   <script src="/js/resume-upload.js"></script>
+  <script src="/ref.js"></script>
 </head>
 <body class="min-h-screen text-slate-100 flex items-center justify-center p-4 md:p-8 relative overflow-x-hidden">
 
@@ -2797,6 +2798,8 @@
       });
 
       try {
+        // The link that brought them (?ref=…), kept by /ref.js for 30 days.
+        payload.ref = window.tenSignupRef ? window.tenSignupRef() : "";
         const res = await fetch("/api/register-hub/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

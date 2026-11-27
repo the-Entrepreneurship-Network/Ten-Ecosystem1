@@ -532,6 +532,16 @@ The in-house email console (`routes/growth.js`, `public/growth-os.html`,
   opted out, with a 6-day per-address cooldown.
 - **It has no off switch** (§10).
 
+**Sign-ups by source** (`public/ref.js`, `utils/signupRef.js`)
+- A link with `?ref=<label>`, such as `/register?ref=li-2026-12-01-webdev`, is
+  remembered for 30 days on `/`, `/overview` and `/register`. The student is
+  saved with it as `signupRef`. Anything that is not a plain label is dropped.
+- `GET /api/growth/signup-sources?days=30` counts sign-ups per label. A Growth
+  OS session can read it. So can the marketing agent, with `SIGNUP_SOURCES_KEY`
+  as `Authorization: Bearer …`; that key opens this one route only.
+- The college letter links with `ref=college-<domain>`, so each college's
+  sign-ups are counted to it.
+
 **College agent** (`services/collegeDiscovery.js`, `collegeOutreach.js`)
 - **Discovery** runs 4 times a day (02:37, 08:37, 14:37, 20:37 IST), about
   400 college sites per run.
@@ -980,7 +990,7 @@ except SMTP, which fails silently (§11). By area:
 | Email | `SMTP_USER` / `SES_SMTP_USER` / `EMAIL_USER`, the matching `*_PASS`, `*_HOST` (default: the Brevo relay), `*_PORT` (587), `SMTP_SERVICE`, `EMAIL_SECURE`, `EMAIL_FROM`, `HR_NOTIFY_EMAIL` |
 | AI | `GEMINI_API_KEY` (aliases `GOOGLE_API_KEY`, `GEMINI_KEY` work only in `utils/gemini.js`), `GEMINI_MODEL`, `IDEA_AGENT_ENABLED`, `IDEA_AGENT_CRON` |
 | Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CONTACT` |
-| Growth OS | `GROWTH_PROVIDER_CAP` (15,000), `GROWTH_STAGE1_LIMIT` (7,500), `GROWTH_EXTENSION_MAX` (4,000), `GROWTH_PORTAL_RESERVE` (3,500), `GROWTH_QUOTA_RESET_DAY` (1), `GROWTH_SEND_THROTTLE_MS` (2,000), `GROWTH_ATTRIBUTION_DAYS` (30) |
+| Growth OS | `GROWTH_PROVIDER_CAP` (15,000), `GROWTH_STAGE1_LIMIT` (7,500), `GROWTH_EXTENSION_MAX` (4,000), `GROWTH_PORTAL_RESERVE` (3,500), `GROWTH_QUOTA_RESET_DAY` (1), `GROWTH_SEND_THROTTLE_MS` (2,000), `GROWTH_ATTRIBUTION_DAYS` (30), `SIGNUP_SOURCES_KEY` (24+ characters; lets the marketing agent read sign-ups by source, and nothing else) |
 | College agent | `COLLEGE_AGENT_CRON` (or `off`), `COLLEGE_AGENT_BATCH`, `COLLEGE_AGENT_CONCURRENCY`, `COLLEGE_DEADLINE_MS`, `COLLEGE_FETCH_TIMEOUT_MS`, `COLLEGE_PATH_DELAY_MS`, `COLLEGE_MAX_CONTACTS`, `COLLEGE_BATCH_SIZE`, `COLLEGE_RESUME_ON_BOOT` |
 | Attendance agent | `ATTENDANCE_AGENT_ENABLED`, `ATTENDANCE_REPORT_CRON`, `ATTENDANCE_REPORT_DAY`, `ATTENDANCE_REPORT_TO`, `ATTENDANCE_TZ`, `ATTENDANCE_LOGIN_RETENTION_DAYS`, `ATTENDANCE_TRANSPORT`, `N8N_ATTENDANCE_WEBHOOK_URL`, `N8N_WEBHOOK_SECRET`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG`, `ATTENDANCE_SHEET_URL` / `_ID` / `_CSV_URL` / `_GID`, `ATTENDANCE_SHEET_CACHE_SECONDS`, `ATTENDANCE_REQUIRED_PER_DAY`, `ATTENDANCE_INCLUDE_PORTAL_LOGINS` |
 | Payments | `PAYMENT_ENABLED`, `PAYMENT_PROVIDER`, `UPI_ID`, `PAYMENTSETU_API_KEY`, `SETU_CLIENT_ID`, `SETU_CLIENT_SECRET`, `SETU_SCHEME_ID`, `SETU_BASE_URL`, `SETU_WEBHOOK_SECRET`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` |
