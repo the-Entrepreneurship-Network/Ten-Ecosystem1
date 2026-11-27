@@ -184,7 +184,7 @@ describe('the review of the waiting submissions', () => {
         ]);
         const mail = unfold(mockState.sent[0]);
         expect(mail).toContain('Subject: [ai-coordinator] daily run: 3 approved, 1 asked for changes, 3 still waiting; 0 sent to HR for certificates');
-        expect(mail).toContain('3. Reviewed submissions: 4 (3 approved, 1 asked for changes), after 5 pre-check(s).');
+        expect(mail).toContain('1. Reviewed submissions: 4 (3 approved, 1 asked for changes), after 5 pre-check(s).');
         expect(mail).toContain('"Week 1: Landing page" -> asked for changes: Before it can be approved: make it public.');
         expect(mail).toContain('Still waiting for a coordinator: 3. Of these, 0 have no pre-check yet, 2 could not be checked automatically or Gemini did not read them (a person should look), and 1 are older than 60 days (left for a person).');
         // A pause only after a check that went to the network.
@@ -291,7 +291,7 @@ describe('the certificate approvals', () => {
         expect(backlog.waiting).toBe(0);
         expect(certificates.approved).toBe(1);
         expect(unfold(mockState.sent[0])).toContain('Subject: [ai-coordinator] daily run: 0 approved, 0 asked for changes, 0 still waiting; 1 sent to HR for certificates');
-        expect(unfold(mockState.sent[0])).toContain('4. Approved for certificates and sent to HR: 1.');
+        expect(unfold(mockState.sent[0])).toContain('2. Approved for certificates and sent to HR: 1.');
     });
 
     it('does nothing with AI_COORDINATOR_REVIEW=off', async () => {
@@ -335,18 +335,16 @@ describe('the report', () => {
         ];
 
         const text = jobs._internal.reportText(await jobs.buildReport(NOW));
-        expect(text).toContain('1. Answered students in Messages: 2 (1 from saved answers, 1 by Gemini).');
-        expect(text).toContain('"how do I mark attendance" -> "Mark it every day, Monday to Saturday."');
-        expect(text).toContain('2. Handed over to a coordinator: 1 (money: 1).');
-        expect(text).toContain('3. Reviewed submissions: 2 (1 approved, 1 asked for changes), after 1 pre-check(s).');
+        expect(text).not.toMatch(/Answered students|Handed over|how do I mark attendance/);
+        expect(text).toContain('1. Reviewed submissions: 2 (1 approved, 1 asked for changes), after 1 pre-check(s).');
         expect(text).toContain('"Week 1: Landing page" -> approved: Clean page. Add alt text next time.');
         expect(text).toContain('"Week 2: API" -> asked for changes: The GitHub repository is private');
         expect(text).toContain('Still waiting for a coordinator: 3. Of these, 1 have no pre-check yet, 1 could not be checked automatically or Gemini did not read them (a person should look), and 1 are older than 60 days (left for a person).');
-        expect(text).toContain('4. Approved for certificates and sent to HR: 1.');
+        expect(text).toContain('2. Approved for certificates and sent to HR: 1.');
         expect(text).toContain('TEN/WEB/1006: attendance 88%, 7 tasks approved, internship ended 2026-11-20');
-        expect(text).toContain('5. Reminders: 3 (2 sign-in, 1 unfinished week, 0 weekly progress).');
-        expect(text).toContain('6. Coordinator summaries: 1 domain(s); 1 email(s) sent, 1 failed.');
-        expect(text).toContain('7. Interview Room: 1 interview(s) finished, 2 question turn(s).');
+        expect(text).toContain('3. Reminders: 3 (2 sign-in, 1 unfinished week, 0 weekly progress).');
+        expect(text).toContain('4. Coordinator summaries: 1 domain(s); 1 email(s) sent, 1 failed.');
+        expect(text).toContain('5. Interview Room: 1 interview(s) finished, 2 question turn(s).');
         expect(text).toContain('TEN/WEB/1009: 8 of 8 answered, overall 7/10. Eyes on the camera 93% of the time');
         expect(text).not.toContain('older than a day');
         expect(text).not.toContain('priya@gmail.com');
@@ -355,12 +353,12 @@ describe('the report', () => {
 
     it('the daily one says so in its subject, and with no team inbox it is only logged', async () => {
         await jobs.sendReport(NOW);
-        expect(unfold(mockState.sent[0])).toContain('Subject: [ai-coordinator] daily report: 0 answered, 0 reviewed, 0 reminders');
+        expect(unfold(mockState.sent[0])).toContain('Subject: [ai-coordinator] daily report: 0 reviewed, 0 sent to HR, 0 reminders');
 
         delete process.env.SUPPORT_COPY_TO;
         const out = await jobs.sendReport(NOW);
         expect(out.sent).toBe(false);
-        expect(out.text).toContain('1. Answered students in Messages: 0');
+        expect(out.text).toContain('1. Reviewed submissions: 0');
         expect(mockState.sent).toHaveLength(1);
     });
 });

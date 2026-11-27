@@ -11496,10 +11496,10 @@ const io = new SocketIOServer(server, {
 // presence do not need it passed around.
 app.set("io", io);
 
-// The AI Coordinator answers a student's private messages to it, through the
-// same delivery as everyone else's (services/aiCoordinator.js).
+// The AI Coordinator works in the background only; it does not chat. Its
+// coordinator summary reaches the .env roster's coordinators too.
 const aiCoordinator = require("./services/aiCoordinator");
-aiCoordinator.attach({ deliver: deliverChatMessage, io, roster: () => app.get("rosterStaff") || [] });
+aiCoordinator.attach({ roster: () => app.get("rosterStaff") || [] });
 // Its reviews of clear submissions take the coordinator's own path, on
 // whichever worker takes the hand-in; the scheduled runs stay on worker 0.
 require("./services/aiCoordinatorJobs").attach({ review: reviewSubmission, certificate: { criteria: certificateCriteria, approve: approveForCertificate } });
@@ -11676,10 +11676,6 @@ async function deliverChatMessage(identity, payload) {
             }
         }
 
-
-        // A message to the AI Coordinator gets its reply afterwards, never
-        // in the sender's way.
-        aiCoordinator.onMessage(identity, doc);
 
         return { success: true, messageId: String(doc._id), doc: doc };
     } catch (e) {

@@ -192,13 +192,13 @@ describe("the coordinators' summary", () => {
         ];
     });
 
-    it('says what is waiting, who was handed over, who is under 75% and what the AI answered, for one domain', async () => {
+    it('says what is waiting and who is under 75%, for one domain, and nothing about chat', async () => {
         const s = await jobs.buildSummary('Web Development', FRIDAY);
         expect(s.pending).toMatchObject({ count: 2, oldestDays: 3 });
-        expect(s.pending.items.map((i) => [i.employeeId, i.ai])).toEqual([['TEN/WEB/1001', 'ready'], ['TEN/WEB/1002', 'problems']]);
-        expect(s.handovers).toEqual([expect.objectContaining({ employeeId: 'TEN/WEB/1002', name: 'Ravi Kumar', about: 'money', question: 'I paid but it is not showing' })]);
+        expect(s.pending.items.map((i) => [i.employeeId, i.name, i.ai])).toEqual([['TEN/WEB/1001', 'Asha Verma', 'ready'], ['TEN/WEB/1002', 'Ravi Kumar', 'problems']]);
         expect(s.lowAttendance.map((a) => a.employeeId)).toEqual(['TEN/WEB/1002']);
-        expect(s.answered).toMatchObject({ total: 3, saved: 1, ai: 1, handover: 1 });
+        expect(s).not.toHaveProperty('handovers');
+        expect(s).not.toHaveProperty('answered');
     });
 
     it('in the morning: a dashboard notice for the domain, an email to coordinators with an address, once a day', async () => {
@@ -207,10 +207,11 @@ describe("the coordinators' summary", () => {
         expect(mockState.mails).toHaveLength(1);
         expect(mockState.mails[0].to).toBe('ananya@ten-coordinators.in');
         expect(mockState.mails[0].subject).toBe("Web Development: today's summary from the AI Coordinator");
-        expect(mockState.mails[0].html).toContain('I paid but it is not showing');
         expect(mockState.mails[0].html).toContain('Ravi Kumar');
+        expect(mockState.mails[0].html).not.toContain('I paid but it is not showing');
+        expect(mockState.mails[0].html).not.toMatch(/handed over|What the AI answered/i);
         const notice = mockState.notes.find((n) => n.targetType === 'coordinator-domain');
-        expect(notice).toMatchObject({ targetDomain: 'Web Development', title: "Today's AI summary", type: 'warning' });
+        expect(notice).toMatchObject({ targetDomain: 'Web Development', title: "Today's AI summary", type: 'info', message: '2 submission(s) waiting, 1 under 75% attendance. Open the AI Assistant tab for the details.' });
         expect(mockState.mailRows[0]).toMatchObject({ mailType: 'ai_coordinator_summary', recipientEmail: 'ananya@ten-coordinators.in' });
 
         expect(await jobs.runSummaries(FRIDAY)).toEqual({ domains: 0, emails: 0 });

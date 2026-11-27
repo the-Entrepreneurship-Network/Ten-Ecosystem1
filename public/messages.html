@@ -473,13 +473,7 @@ async function loadMessages(room){
     box.innerHTML = "";
     var msgs = d.messages || [];
     if (!msgs.length){
-      // The AI Coordinator says what it is before anyone types to it.
-      box.innerHTML = /::ten-ai(::|$)/.test(room)
-        ? '<div class="empty"><div class="big">🤖</div><div style="max-width:340px;line-height:1.6;">' +
-          "This is TEN's <b>AI Coordinator</b>, an AI assistant, not a person. Ask about your tasks, " +
-          "attendance, documents or the portal, at any hour. Marks, complaints, payments and personal " +
-          "matters go to your coordinator.</div></div>"
-        : '<div class="empty"><div class="big">👋</div>' +
+      box.innerHTML = '<div class="empty"><div class="big">👋</div>' +
           "<div>No messages yet — say hello.</div></div>";
       return;
     }

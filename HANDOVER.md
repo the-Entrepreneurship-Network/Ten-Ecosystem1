@@ -839,39 +839,20 @@ out money. Ask a CA about TDS (section 194H) before building payouts (§17.3).
 Also still to build: coin skips, the leaderboard and College Cup, and the
 extras in the approved plan.
 
-### 7.14 AI Coordinator (an AI assistant, labelled as one)
+### 7.14 AI Coordinator (an AI in the background, labelled as one)
 
-One assistant for every domain: `services/aiCoordinator.js` (chat),
-`services/submissionPrecheck.js` (submissions), `services/aiCoordinatorJobs.js`
-(reminders, the coordinators' summary, the pre-check backlog and the daily
-report), `routes/v2/aiCoordinator.js`.
-It costs nothing: saved answers first, Gemini's free tier second, the
-portal's own SMTP. **`AI_COORDINATOR=off` switches all of it off**, including
-the dashboard entries.
+One agent for every domain. **It does not chat with students** (the owner's
+decision, 27 Nov 2026: the Messages chatbot `ten-ai` was removed). It works
+in the background: `services/submissionPrecheck.js` (submissions),
+`services/aiCoordinatorJobs.js` (reviews, certificate approvals, reminders,
+the coordinators' summary and the daily report), `routes/v2/aiCoordinator.js`,
+and the Interview Room (§7.15). `services/aiCoordinator.js` holds the shared
+helpers: the switch, the student's record, the domain's coordinators and the
+scrubber. It costs nothing: Gemini's free tier and the portal's own SMTP.
+**`AI_COORDINATOR=off` switches all of it off**, including the Interview
+Room's dashboard entries. Old conversations with `ten-ai` (kept 30 days) are
+hidden from Messages.
 
-- **Chat.** The student opens it from the dashboard ("AI Coordinator 24/7" in
-  the menu, a card on the main screen, and a button on the coordinator card) or
-  from Messages. It is the chat id `ten-ai`. Its replies go through
-  `deliverChatMessage` like anyone's, as role `assistant`, so the chat shows an
-  "AI" tag; it introduces itself as an AI in its first reply. For each question
-  (several quick messages count as one):
-  1. **Hand-over first**: marks or review disputes, complaints, money problems
-     and personal problems (patterns in `HANDOVER`), plus anything the help
-     desk counts as sensitive. The student is told their coordinator has it;
-     the coordinators get a dashboard notice and a phone push naming the
-     student and the topic. The notice never quotes the message: a notice is
-     shared by the whole domain's staff view, while the words stay in the AI
-     Assistant tab and the daily email. A self-harm message
-     also gets the Tele-MANAS helpline (14416) and an URGENT notice.
-  2. **A saved help-desk answer** (§7.12) when one clearly fits (score 0.6 or
-     more), with the student's own details filled in. No AI involved.
-  3. **Gemini** otherwise, with the student's record: domain, plan, dates,
-     attendance, current week's tasks, recent submissions, document status.
-     Never their name, email, phone or Employee ID, and email addresses and
-     phone numbers typed into the question are removed first. Gemini may
-     answer, or say a person must take it.
-  4. A hand-over when Gemini fails or there is no key. At most 20 Gemini
-     replies per student per day; past that, saved answers only.
 - **Submission pre-check.** After `POST /submit-task` (not for case studies)
   and after a Task Journey submission. It checks whether the link opens for
   someone not signed in. That covers a Google Drive link shared only with its
@@ -933,7 +914,7 @@ the dashboard entries.
       coordinator can revoke the AI's approval from the Students tab.
     - Pacing: 10 seconds apart, 2.5 minutes after a GitHub repository without
       `GITHUB_TOKEN`. At most 150 new pre-checks a day, because Gemini's free
-      quota is shared with the exam papers and the chat; a decision on a fresh
+      quota is shared with the exam papers and the Interview Room; a decision on a fresh
       check costs nothing. A student's own hand-in is checked whatever the
       count. **`AI_COORDINATOR_REVIEW=off`** keeps the pre-checks and leaves
       every decision to a person.
@@ -946,23 +927,21 @@ the dashboard entries.
 - **Coordinators' summary** (09:05 IST, and live in the dashboard's AI
   Assistant tab, `GET /api/v2/ai-coordinator/summary`):
   - submissions waiting, oldest first, with the AI's verdict;
-  - students handed over in the last 24 hours, with their words;
   - running students under 75% attendance (not judged in their first 3
-    working days);
-  - what the AI answered.
+    working days).
   - It goes by email to every coordinator of the domain who has an address:
     database coordinators, and roster ones whose `COORDINATOR_CREDENTIALS`
     entry has an `email`. It also goes as a dashboard notice. A quiet domain
     gets nothing.
 - **Daily report** (10:20 IST), the proof of what it did: to the team inbox
   (`SUPPORT_COPY_TO`) from the help desk's mailbox, like the Server ops emails.
-  It counts the last 24 hours of answers, hand-overs, reviews (approved and
-  asked for changes), pre-checks, reminders and summaries, with the latest
+  It counts the last 24 hours of reviews (approved and asked for changes),
+  pre-checks, certificate approvals, reminders, summaries and interviews, with
+  the latest
   examples (contact details removed), and how many submissions still wait and
   why. It is also sent when a backlog run ends. Without the
   help desk mailbox it is only written to the log.
-- **Records:** `AiCoordinatorLog`, kept 120 days: answers, hand-overs (with
-  the question), pre-checks, reviews, certificate approvals, Interview Room
+- **Records:** `AiCoordinatorLog`, kept 120 days: pre-checks, reviews, certificate approvals, Interview Room
   turns and reports, reminders and summaries.
 
 ### 7.15 Interview Room (fortnightly, on camera, free)
