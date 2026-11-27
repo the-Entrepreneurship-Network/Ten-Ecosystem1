@@ -4155,8 +4155,10 @@ document.addEventListener("DOMContentLoaded", function(){
 
 function attPill(status){
   if(!status) return '<span style="color:#5a7299;">—</span>';
-  const color = status==="Present" ? "#10b981" : "#f43f5e";
-  const bg    = status==="Present" ? "rgba(16,185,129,0.12)" : "rgba(244,63,94,0.12)";
+  // Today, not yet marked: amber, because the day is not over.
+  const waiting = (status === "Pending" || status === "Not yet");
+  const color = status==="Present" ? "#10b981" : waiting ? "#f59e0b" : "#f43f5e";
+  const bg    = status==="Present" ? "rgba(16,185,129,0.12)" : waiting ? "rgba(245,158,11,0.12)" : "rgba(244,63,94,0.12)";
   return `<span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:700;color:${color};background:${bg};">${status}</span>`;
 }
 
@@ -4231,8 +4233,16 @@ function renderAttendanceHistory(records){
     const fmt = day.date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
     const isPreportal = !!(portalStartKey && day.dateKey < portalStartKey);
     const marks = byDate[day.dateKey] || {};
-    const selfStatus = marks.self || (isPreportal ? "Present" : "Absent");
-    const coordStatus = marks.coordinator || (isPreportal ? "Present" : "Absent");
+    /*
+     * Today is not over. An unmarked class used to show a red "Absent" from
+     * the moment the student looked, though the coordinator can still mark it
+     * and, failing that, the 11:55 pm auto-mark does (services/automationCron
+     * autoMarkCoordinatorAttendance). That red Absent is the "I attended and
+     * filled the form but it shows class absent" email.
+     */
+    const isToday = day.dateKey === keyOf(nowZero);
+    const selfStatus = marks.self || (isPreportal ? "Present" : (isToday ? "Not yet" : "Absent"));
+    const coordStatus = marks.coordinator || (isPreportal ? "Present" : (isToday ? "Pending" : "Absent"));
     const note = isPreportal
       ? ' <span style="font-size:10px;color:#8aa4c8;font-weight:500;">via WhatsApp</span>'
       : '';
@@ -4244,7 +4254,9 @@ function renderAttendanceHistory(records){
       <td style="padding:8px 10px;">${attPill(coordStatus)}</td></tr>`;
   });
   html += '</tbody></table></div>';
-  html += '<div style="padding:8px 10px;color:#8aa4c8;font-size:11px;">Sundays are not working days and are not listed.</div>';
+  html += '<div style="padding:8px 10px;color:#8aa4c8;font-size:11px;">Sundays are not working days and are not listed. ' +
+          'Your coordinator marks the Class column. If they have not marked a day by 11:55 pm, it is marked Present ' +
+          'automatically when you marked your own attendance or were active on the portal that day.</div>';
   c.innerHTML = html;
 }
 

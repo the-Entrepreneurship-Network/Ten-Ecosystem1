@@ -1099,5 +1099,7 @@ module.exports = {
     autoGenerateOfferLetter,
     autoGenerateCertificates,
     initiateCertificateApproval,
-    checkMailHealth
+    checkMailHealth,
+    // The nightly class auto-mark, so it can be tested and run by hand.
+    autoMarkCoordinatorAttendance
 };
