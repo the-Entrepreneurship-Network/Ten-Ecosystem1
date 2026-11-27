@@ -908,7 +908,7 @@ body::before {
       <div class="sec-card" onclick="openCoordModal('ai')">
         <div class="sec-card-icon">🤖</div>
         <div class="sec-card-title">AI Assistant</div>
-        <div class="sec-card-desc">Today's summary: work waiting, students handed over to you, attendance under 75%, what the AI answered</div>
+        <div class="sec-card-desc">Today's summary: work waiting for your review and attendance under 75%</div>
       </div>
       <div class="sec-card" onclick="openCoordModal('attendance')">
         <div class="sec-card-icon">🪪</div>
@@ -1474,7 +1474,7 @@ Test Cases:
           <div class="section-icon">🤖</div>
           <div>
             <div class="section-title" style="font-size:18px;font-weight:800;color:#fff;">TEN AI Coordinator</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px;max-width:640px;">An AI assistant, labelled as one, that answers your students' private messages at any hour. It passes marks, complaints, payments and personal matters to you, pre-checks every submission and sends reminders. It reviews the clear cases itself, labelled as its own: approved when every check passed and the work is the task, asked for changes when a check failed. Anything it could not check waits for you.</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;max-width:640px;">An AI that works in the background, labelled as one. It pre-checks every submission and sends your students reminders. It reviews the clear cases itself, labelled as its own: approved when every check passed and the work is the task, asked for changes when a check failed; you can change any of its decisions. It approves finished students for certificates when both criteria are met, for HR's final review. Anything it could not check waits for you.</div>
           </div>
         </div>
         <button onclick="loadAiSummary()" style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.35);color:#c4b5fd;padding:8px 16px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;">↻ Refresh</button>
@@ -3089,21 +3089,15 @@ async function loadAiSummary(){
     const r = await fetch("/api/v2/ai-coordinator/summary?domain=" + encodeURIComponent(domainStr), { credentials: "same-origin" });
     const d = await r.json();
     if (!r.ok || !d.success) throw new Error(d.message || "Could not load the summary.");
-    const when = (t) => new Date(t).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-    const reply = (id) => `<a href="/messages?to=${encodeURIComponent(id)}" style="color:#c4b5fd;">Reply in Messages</a>`;
-    const P = d.pending, H = d.handovers, A = d.lowAttendance, Q = d.answered;
+    const P = d.pending, A = d.lowAttendance;
     box.innerHTML = `
       ${d.enabled ? "" : '<div class="ai-box" style="grid-column:1/-1;color:var(--amber);">The AI Coordinator is switched off on this server (AI_COORDINATOR=off).</div>'}
       <div class="ai-box"><h4>Waiting for your review</h4><div class="ai-big">${P.count}</div>
         <small style="color:var(--muted)">${P.count ? "the oldest for " + P.oldestDays + " day(s)" : "nothing waiting"}</small>
         <ul>${P.items.map(i => `<li>${aiEsc(i.name)} <small>${aiEsc(i.employeeId)} · ${aiEsc(i.task)} · ${i.days} day(s) · ${i.ai === "ready" ? "AI: looks ready" : i.ai === "problems" ? "AI: " + aiEsc(i.problems.join(" ")) : "AI: not checked"}</small></li>`).join("")}</ul></div>
-      <div class="ai-box"><h4>Handed over to you (last 24 h)</h4><div class="ai-big">${H.length}</div>
-        <ul>${H.map(h => `<li><b>${aiEsc(h.name)}</b> <small>${aiEsc(h.employeeId)} · ${aiEsc(h.about)} · ${when(h.at)}</small>“${aiEsc(h.question)}” <small>${reply(h.employeeId)}</small></li>`).join("") || "<li><small>No hand-overs.</small></li>"}</ul></div>
       <div class="ai-box"><h4>Attendance under 75%</h4><div class="ai-big">${A.length}</div>
         <ul>${A.slice(0, 20).map(a => `<li>${aiEsc(a.name)} <small>${aiEsc(a.employeeId)} · ${a.percentage}% · ${a.canStillQualify ? "needs " + a.stillNeedsByEnd + " more day(s) by the end" : "cannot reach 75% by the end date"}</small></li>`).join("") || "<li><small>Everyone is at 75% or more.</small></li>"}</ul></div>
-      <div class="ai-box"><h4>What the AI answered (last 24 h)</h4><div class="ai-big">${Q.total}</div>
-        <small style="color:var(--muted)">${Q.saved} from saved answers · ${Q.ai} written by the AI · ${Q.handover} handed over</small>
-        <ul>${Q.recent.map(x => `<li>“${aiEsc(x.question)}” <small>${aiEsc(x.employeeId)} · ${x.source === "saved" ? "saved answer" : x.source === "ai" ? "AI answer" : "handed over"} · ${when(x.at)}</small></li>`).join("")}</ul></div>`;
+`;
   } catch (e) {
     box.innerHTML = '<div class="ai-box" style="color:var(--red);">' + aiEsc(e.message) + "</div>";
   }

@@ -56,28 +56,14 @@ test('HR is found by name', async () => {
 
 test('with no search, every roster account is offered, but not yourself', async () => {
   const coordinator = { role: 'coordinator', id: 'web_admin', aliases: ['web_admin'], domain: 'Web Development' };
-  expect((await directory('')).people.filter((p) => p.role !== 'assistant').length).toBe(3);
+  expect((await directory('')).people.length).toBe(3);
   expect((await directory('', coordinator)).people.map((p) => p.id)).not.toContain('web_admin');
 });
 
-test('a student is offered the AI Coordinator first, labelled as an AI; staff are not', async () => {
-  const people = (await directory('')).people;
-  expect(people[0]).toEqual({ id: 'ten-ai', name: 'TEN AI Coordinator', role: 'assistant', domain: 'Web Development' });
-  expect((await directory('ai')).people.map((p) => p.id)).toContain('ten-ai');
-  expect((await directory('manager')).people.map((p) => p.id)).not.toContain('ten-ai');
-  const coordinator = { role: 'coordinator', id: 'web_admin', aliases: ['web_admin'], domain: 'Web Development' };
-  expect((await directory('', coordinator)).people.map((p) => p.id)).not.toContain('ten-ai');
-});
-
-test("the AI Coordinator's profile says it is an AI, not a person", async () => {
-  const layer = router.stack.find((l) => l.route && l.route.path === '/profile/:userId');
-  const handlers = layer.route.stack.map((s) => s.handle);
-  let body;
-  await handlers[handlers.length - 1](
-    { params: { userId: 'ten-ai' }, me: student, app: { get: () => null } },
-    { json: (b) => { body = b; }, status() { return this; } });
-  expect(body.profile).toMatchObject({ id: 'ten-ai', name: 'TEN AI Coordinator', role: 'assistant', domain: 'Web Development' });
-  expect(body.profile.about).toMatch(/not a person/);
+test('the AI Coordinator is not someone to chat with: no AI in the directory, whatever is searched', async () => {
+  for (const q of ['', 'ai', 'coordinator', 'ten-ai']) {
+    expect((await directory(q)).people.map((p) => p.id)).not.toContain('ten-ai');
+  }
 });
 
 test('server.js hands over ids, names and domains only, never password material', () => {

@@ -10,8 +10,8 @@
  *   10:05 Thursdays   a nudge about an unfinished week (portal and phone).
  *   10:05 Sundays     a weekly progress note (portal and phone).
  *   09:05 every day   a summary for each domain's coordinators: what is
- *                     waiting, who was handed over, who is under 75%, what the
- *                     AI answered. By email to coordinators with an address,
+ *                     waiting for review and who is under 75% attendance.
+ *                     By email to coordinators with an address,
  *                     and in the dashboard's AI Assistant tab, always current.
  *   02:05 and 08:35,  every waiting submission, oldest first: a pre-check
  *   and on boot       where none is fresh, and, for those handed in within
@@ -146,7 +146,7 @@ async function remindInactive(now, students, atts) {
             title: `You haven't signed in for ${days} days`,
             message: 'Your TEN internship is still running. Sign in to mark today\'s attendance and keep your tasks moving: ' +
                 'the Letter of Completion needs 75% attendance' + (pct(att) ? `, and yours is ${pct(att)} so far` : '') + '. ' +
-                'Stuck on something? Ask the AI Coordinator in Messages, at any hour.',
+                'Stuck on something? Message your coordinator in Messages.',
             email: !s.emailOptOut
         });
         sent += 1;
@@ -167,7 +167,7 @@ async function remindWeek(now, students) {
         await notify(s, {
             title: `Week ${p.week}: ${p.current.length} task${p.current.length === 1 ? '' : 's'} left`,
             message: `Still to do in Week ${p.week}: ${titles}${p.current.length > 4 ? ' and more' : ''}. ` +
-                `Finish them and pass each task's quiz to open Week ${p.week + 1}. Questions? Ask the AI Coordinator in Messages.`,
+                `Finish them and pass each task's quiz to open Week ${p.week + 1}. Questions? Message your coordinator in Messages.`,
             email: false
         });
         sent += 1;
@@ -217,18 +217,15 @@ async function runReminders(now = new Date()) {
 /** What a domain's coordinators see in the AI Assistant tab, and in the morning email. */
 async function buildSummary(domain, now = new Date()) {
     const rx = domainRx(domain);
-    const since = new Date(now - DAY);
     const Submission = mongoose.model('Submission');
-    const [waiting, logs, students] = await Promise.all([
+    const [waiting, students] = await Promise.all([
         Submission.find({ domain: rx, status: 'Pending', reviewedOnce: { $ne: true } })
             .sort({ submittedAt: 1 }).select('employeeId task submittedAt aiCheck').limit(500).lean(),
-        AiCoordinatorLog.find({ domain: rx, kind: { $in: ['answer', 'handover'] }, createdAt: { $gte: since } })
-            .sort({ createdAt: -1 }).limit(300).lean(),
         runningStudents(now, { domain: rx })
     ]);
 
     const names = new Map(students.map((s) => [s.employeeId, nameOf(s)]));
-    const missing = Array.from(new Set(waiting.map((w) => w.employeeId).concat(logs.map((l) => l.employeeId))))
+    const missing = Array.from(new Set(waiting.map((w) => w.employeeId)))
         .filter((id) => id && !names.has(id));
     if (missing.length) {
         for (const s of await Student.find({ employeeId: { $in: missing } }).select('employeeId name firstName lastName').lean()) {
@@ -246,12 +243,6 @@ async function buildSummary(domain, now = new Date()) {
             employeeId: s.employeeId, name: nameOf(s), percentage: a.percentage,
             stillNeedsByEnd: a.stillNeedsByEnd, canStillQualify: a.canStillQualify
         }));
-
-    const handovers = logs.filter((l) => l.kind === 'handover').map((l) => ({
-        at: l.createdAt, employeeId: l.employeeId, name: who(l.employeeId),
-        question: String(l.question || '').slice(0, 300), about: ai.HANDOVER_LABEL[l.source] || 'something only a person can answer'
-    }));
-    const count = (src) => logs.filter((l) => l.kind === 'answer' && l.source === src).length;
 
     return {
         success: true,
@@ -272,15 +263,7 @@ async function buildSummary(domain, now = new Date()) {
                 };
             })
         },
-        handovers,
-        lowAttendance,
-        answered: {
-            total: logs.length, saved: count('saved'), ai: count('ai'), handover: handovers.length,
-            recent: logs.slice(0, 8).map((l) => ({
-                at: l.createdAt, employeeId: l.employeeId, question: String(l.question || '').slice(0, 160),
-                source: l.kind === 'handover' ? 'handover' : l.source
-            }))
-        }
+        lowAttendance
     };
 }
 
@@ -288,21 +271,15 @@ function summaryEmail(summary, coordinatorName) {
     const e = mailer.escapeHtml;
     const list = (items) => (items.length ? '<ul style="margin:6px 0 0 18px;padding:0;">' + items.map((i) => `<li style="margin:4px 0;">${i}</li>`).join('') + '</ul>' : '');
     const P = summary.pending;
-    const H = summary.handovers;
     const A = summary.lowAttendance;
-    const Q = summary.answered;
     const section = (title, line, items) => `<p style="margin:18px 0 0;"><b style="color:#f5c542;">${title}</b><br>${line}</p>${list(items)}`;
     const bodyHtml =
         section('Waiting for your review', P.count ? `${P.count} submission(s), the oldest for ${P.oldestDays} day(s).` : 'Nothing is waiting.',
             P.items.slice(0, 10).map((i) => `${e(i.name)} (${e(i.employeeId)}): ${e(i.task)} — ` +
                 (i.ai === 'ready' ? 'AI pre-check: looks ready' : i.ai === 'problems' ? 'AI pre-check: ' + e(i.problems.join(' ')) : 'not checked yet'))) +
-        section('Handed over to you by the AI (last 24 hours)', H.length ? `${H.length} student(s) need a person.` : 'None.',
-            H.slice(0, 10).map((h) => `<b>${e(h.name)}</b> (${e(h.employeeId)}), about ${e(h.about)}: "${e(h.question)}"`)) +
         section('Attendance under 75%', A.length ? `${A.length} student(s).` : 'Everyone is at 75% or more.',
             A.slice(0, 15).map((a) => `${e(a.name)} (${e(a.employeeId)}): ${a.percentage}%` +
-                (a.canStillQualify ? `, needs ${a.stillNeedsByEnd} more day(s) by the end` : ', cannot reach 75% by the end date'))) +
-        section('What the AI answered (last 24 hours)',
-            `${Q.total} question(s): ${Q.saved} from saved answers, ${Q.ai} written by the AI, ${Q.handover} handed over.`, []);
+                (a.canStillQualify ? `, needs ${a.stillNeedsByEnd} more day(s) by the end` : ', cannot reach 75% by the end date')));
     return mailer.renderEmail({
         heading: `${summary.domain}: today's summary`,
         name: coordinatorName,
@@ -322,17 +299,16 @@ async function runSummaries(now = new Date()) {
     for (const domain of await ai.domainsWithCoordinators()) {
         try {
             const summary = await buildSummary(domain, now);
-            const nothing = !summary.pending.count && !summary.handovers.length && !summary.lowAttendance.length && !summary.answered.total;
+            const nothing = !summary.pending.count && !summary.lowAttendance.length;
             if (nothing) continue;
             if (!(await claim(`summary:${domain.toLowerCase()}:${today}`, { domain }, 'summary', 'summary'))) continue;
             domains += 1;
 
             await new Notification({
                 title: "Today's AI summary",
-                message: `${summary.pending.count} submission(s) waiting, ${summary.handovers.length} student(s) handed over to you, ` +
-                    `${summary.lowAttendance.length} under 75% attendance, ${summary.answered.total} question(s) answered by the AI. ` +
+                message: `${summary.pending.count} submission(s) waiting, ${summary.lowAttendance.length} under 75% attendance. ` +
                     'Open the AI Assistant tab for the details.',
-                type: summary.handovers.length ? 'warning' : 'info',
+                type: 'info',
                 from: ai.NAME, targetType: 'coordinator-domain', targetDomain: domain
             }).save();
 
@@ -583,7 +559,7 @@ async function buildReport(now = new Date()) {
     const of = (kind) => logs.filter((l) => l.kind === kind);
     return {
         since, now, waiting, unchecked, older,
-        answers: of('answer'), handovers: of('handover'), prechecks: of('precheck'), reviews: of('review'),
+        prechecks: of('precheck'), reviews: of('review'),
         certificates: of('certificate'), meetings: of('meeting'), reminders: of('reminder'), summaries: of('summary'),
         summaryEmails: { sent: mails.filter((m) => m.status !== 'failed').length, failed: mails.filter((m) => m.status === 'failed').length }
     };
@@ -593,26 +569,21 @@ function reportText(r) {
     const n = (rows, source) => rows.filter((x) => x.source === source).length;
     const clip = (s, len) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > len ? t.slice(0, len - 1) + '…' : t; };
     const at = (d) => new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-    const byReason = Object.entries(r.handovers.reduce((m, h) => { m[h.source] = (m[h.source] || 0) + 1; return m; }, {}))
-        .map(([k, v]) => `${ai.HANDOVER_LABEL[k] || k}: ${v}`).join('; ');
     const unsure = Math.max(0, r.waiting - r.unchecked - r.older);
     return [
         `What the AI Coordinator did from ${at(r.since)} to ${at(r.now)} (IST).`,
         '',
-        `1. Answered students in Messages: ${r.answers.length} (${n(r.answers, 'saved')} from saved answers, ${n(r.answers, 'ai')} by Gemini).`,
-        ...r.answers.slice(0, 3).map((a) => `   ${at(a.createdAt)}, ${a.employeeId}: "${clip(ai.scrub(a.question), 90)}" -> "${clip(a.reply, 140)}"`),
-        `2. Handed over to a coordinator: ${r.handovers.length}${byReason ? ` (${byReason})` : ''}.`,
-        `3. Reviewed submissions: ${r.reviews.length} (${n(r.reviews, 'approve')} approved, ${n(r.reviews, 'changes')} asked for changes), after ${r.prechecks.length} pre-check(s).`,
+        `1. Reviewed submissions: ${r.reviews.length} (${n(r.reviews, 'approve')} approved, ${n(r.reviews, 'changes')} asked for changes), after ${r.prechecks.length} pre-check(s).`,
         ...r.reviews.slice(0, 5).map((p) => `   ${at(p.createdAt)}, ${p.employeeId}: "${clip(p.question, 70)}" -> ` +
             (p.source === 'approve' ? 'approved' : 'asked for changes') + (p.reply ? `: ${clip(p.reply, 120)}` : '')),
         `   Still waiting for a coordinator: ${r.waiting}. Of these, ${r.unchecked} have no pre-check yet, ` +
             `${unsure} could not be checked automatically or Gemini did not read them (a person should look), ` +
             `and ${r.older} are older than ${REVIEW_DAYS} days (left for a person).`,
-        `4. Approved for certificates and sent to HR: ${r.certificates.length}.`,
+        `2. Approved for certificates and sent to HR: ${r.certificates.length}.`,
         ...r.certificates.slice(0, 5).map((c) => `   ${at(c.createdAt)}, ${c.employeeId}: ${clip(c.question, 100)}`),
-        `5. Reminders: ${r.reminders.length} (${n(r.reminders, 'inactive')} sign-in, ${n(r.reminders, 'week')} unfinished week, ${n(r.reminders, 'weekly')} weekly progress).`,
-        `6. Coordinator summaries: ${r.summaries.length} domain(s); ${r.summaryEmails.sent} email(s) sent, ${r.summaryEmails.failed} failed.`,
-        `7. Interview Room: ${n(r.meetings, 'report')} interview(s) finished, ${n(r.meetings, 'interview')} question turn(s).`,
+        `3. Reminders: ${r.reminders.length} (${n(r.reminders, 'inactive')} sign-in, ${n(r.reminders, 'week')} unfinished week, ${n(r.reminders, 'weekly')} weekly progress).`,
+        `4. Coordinator summaries: ${r.summaries.length} domain(s); ${r.summaryEmails.sent} email(s) sent, ${r.summaryEmails.failed} failed.`,
+        `5. Interview Room: ${n(r.meetings, 'report')} interview(s) finished, ${n(r.meetings, 'interview')} question turn(s).`,
         ...r.meetings.filter((m) => m.source === 'report').slice(0, 5).map((m) => `   ${at(m.createdAt)}, ${m.employeeId}: ${clip(m.question, 40)}, ${clip(m.reply, 160)}`),
         '',
         'The AI approves a submission only when every check passed and Gemini read it; it asks for changes when a check failed or the work is not the task.',
@@ -626,7 +597,7 @@ async function sendReport(now = new Date(), title = '') {
     if (!ai.enabled() || mongoose.connection.readyState !== 1) return null;
     const r = await buildReport(now);
     const text = reportText(r);
-    console.log(`[ai-coordinator] report: ${r.answers.length} answered, ${r.handovers.length} handed over, ` +
+    console.log(`[ai-coordinator] report: ` +
         `${r.reviews.length} reviewed, ${r.prechecks.length} pre-checked, ${r.certificates.length} sent to HR, ${r.reminders.length} reminder(s), ${r.summaries.length} summary(ies).`);
     const gmail = require('./supportDesk/gmail');
     const to = String(process.env.SUPPORT_COPY_TO || '').trim();
@@ -637,7 +608,7 @@ async function sendReport(now = new Date(), title = '') {
     const MailComposer = require('nodemailer/lib/mail-composer');
     const from = (await gmail.profile()).emailAddress;
     const subject = '[ai-coordinator] ' + (title ||
-        `daily report: ${r.answers.length} answered, ${r.reviews.length} reviewed, ${r.reminders.length} reminders`);
+        `daily report: ${r.reviews.length} reviewed, ${r.certificates.length} sent to HR, ${r.reminders.length} reminders`);
     const raw = await new MailComposer({ from, to, subject, text }).compile().build();
     await gmail.send(raw.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
     return { sent: true, text };
