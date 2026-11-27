@@ -43,30 +43,50 @@ const COIN_ACTIONS = {
     STREAK_BONUS:          (days)  => ({ label: `${days}-day streak bonus`,     coins: days >= 7 ? 30 : 10 }),
 };
 
+const WELCOME_COINS = 250;
+
 /**
  * Award coins to a student.
+ *
+ * One atomic update, like spendCoins below, so two awards that land at the
+ * same moment both count. This used to be findOne → add → save, which lost
+ * one of them both ways:
+ *   - no account yet: both requests opened one, and the unique index on
+ *     studentId refused the second (E11000). A new student's first page load
+ *     does exactly this — the onboarding bonus raced the account opened by
+ *     another request, and the bonus was dropped (seen live, 27 Nov).
+ *   - an account already there: both read the same balance and the second
+ *     save overwrote the first, so the history listed two awards and the
+ *     total held one.
  */
 async function awardCoins(studentId, action, actionArg) {
     const entry = COIN_ACTIONS[action] ? COIN_ACTIONS[action](actionArg) : { label: action, coins: actionArg || 0 };
     if (!entry.coins || entry.coins <= 0) return { totalCoins: 0, awarded: 0 };
 
-    let coinDoc = await StudentCoinModel.findOne({ studentId });
-    if (!coinDoc) {
-        coinDoc = new StudentCoinModel({
-            studentId,
-            totalCoins: 250,
-            coinsHistory: [{ action: "Welcome Bonus Coins", coins: 250, timestamp: new Date() }]
-        });
-    }
+    const earned = { action: entry.label, coins: entry.coins, timestamp: new Date() };
+    const addTo = () => StudentCoinModel.findOneAndUpdate(
+        { studentId },
+        { $inc: { totalCoins: entry.coins }, $push: { coinsHistory: earned }, $set: { lastUpdated: new Date() } },
+        { new: true }
+    );
 
-    coinDoc.totalCoins += entry.coins;
-    coinDoc.coinsHistory.push({
-        action: entry.label,
-        coins: entry.coins,
-        timestamp: new Date()
-    });
-    coinDoc.lastUpdated = new Date();
-    await coinDoc.save();
+    let coinDoc = await addTo();
+    if (!coinDoc) {
+        // First coins ever: open the account with its welcome bonus. If another
+        // request opened it a moment ago, the unique index refuses this one and
+        // the award goes onto that account instead.
+        try {
+            coinDoc = await StudentCoinModel.create({
+                studentId,
+                totalCoins: WELCOME_COINS + entry.coins,
+                coinsHistory: [{ action: "Welcome Bonus Coins", coins: WELCOME_COINS, timestamp: new Date() }, earned],
+                lastUpdated: new Date()
+            });
+        } catch (err) {
+            if (!err || err.code !== 11000) throw err;
+            coinDoc = await addTo();
+        }
+    }
 
     return { totalCoins: coinDoc.totalCoins, awarded: entry.coins };
 }

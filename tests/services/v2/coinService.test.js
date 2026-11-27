@@ -101,3 +101,79 @@ describe('services/v2/coinService', () => {
     });
   });
 });
+
+/*
+ * Two awards that land at the same moment must both count.
+ *
+ * Live, 27 Nov: a new student's first page load opened their coin account from
+ * two requests at once, the unique index refused the second (E11000), and the
+ * onboarding bonus was dropped. awardCoins was findOne → add → save.
+ *
+ * The fake below is a wallet table with MongoDB's unique index on studentId.
+ * Every call yields before it reads, so two calls started together interleave
+ * the way two requests do. It also speaks the old findOne → save API, so these
+ * tests fail on the code they replace.
+ */
+describe('awardCoins when two awards land at once', () => {
+  function load() {
+    const rows = [];
+    const tick = () => new Promise((r) => setImmediate(r));
+    const find = (q) => rows.find((r) => r.studentId === q.studentId);
+    const insert = (doc) => {
+      if (find(doc)) throw Object.assign(new Error('E11000 duplicate key error'), { code: 11000 });
+      const row = { totalCoins: 0, ...doc, coinsHistory: [...(doc.coinsHistory || [])] };
+      rows.push(row);
+      return row;
+    };
+
+    function StudentCoin(doc) { Object.assign(this, { coinsHistory: [] }, doc); }
+    StudentCoin.prototype.save = async function save() {
+      await tick();
+      const row = this._row || insert(this);
+      Object.assign(row, { totalCoins: this.totalCoins, coinsHistory: [...this.coinsHistory] });
+      return this;
+    };
+    StudentCoin.findOne = async (q) => {
+      await tick();
+      const row = find(q);
+      return row ? Object.assign(new StudentCoin({ ...row, coinsHistory: [...row.coinsHistory] }), { _row: row }) : null;
+    };
+    StudentCoin.create = async (doc) => { await tick(); return { ...insert(doc) }; };
+    StudentCoin.findOneAndUpdate = async (q, u) => {
+      await tick();
+      const row = find(q);
+      if (!row) return null;
+      for (const [k, v] of Object.entries(u.$inc || {})) row[k] += v;
+      for (const [k, v] of Object.entries(u.$push || {})) row[k].push(v);
+      Object.assign(row, u.$set || {});
+      return { ...row };
+    };
+
+    jest.resetModules();
+    jest.doMock('../../../models/new/StudentCoin', () => StudentCoin);
+    return { rows, awardCoins: require('../../../services/v2/coinService').awardCoins };
+  }
+
+  it('a brand-new student gets both, on one account that has the welcome bonus', async () => {
+    const { rows, awardCoins } = load();
+    await Promise.all([awardCoins('stu1', 'ONBOARD_BONUS'), awardCoins('stu1', 'ATTENDANCE_DAILY')]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].totalCoins).toBe(250 + 20 + 5);
+    expect(rows[0].coinsHistory.map((h) => h.action).sort())
+      .toEqual(['Daily attendance', 'Onboarding completed', 'Welcome Bonus Coins']);
+  });
+
+  it('a student who already has coins gets both added to the total', async () => {
+    const { rows, awardCoins } = load();
+    rows.push({ studentId: 'stu1', totalCoins: 300, coinsHistory: [] });
+    await Promise.all([awardCoins('stu1', 'TASK_APPROVED', 40), awardCoins('stu1', 'QUIZ_PASSED_FIRST')]);
+    expect(rows[0].totalCoins).toBe(300 + 40 + 50);
+    expect(rows[0].coinsHistory).toHaveLength(2);
+  });
+
+  it('a single first award opens the account with the welcome bonus, as before', async () => {
+    const { rows, awardCoins } = load();
+    expect(await awardCoins('stu1', 'ONBOARD_BONUS')).toEqual({ totalCoins: 270, awarded: 20 });
+    expect(rows[0].coinsHistory[0]).toMatchObject({ action: 'Welcome Bonus Coins', coins: 250 });
+  });
+});
