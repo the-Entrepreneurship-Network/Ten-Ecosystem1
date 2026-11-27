@@ -37,6 +37,14 @@ describe('sign-in never claims success for a student with no internship record',
         expect(login.slice(refuse, refuse + 600)).toMatch(/success: false,\s*noInternship: true,\s*registerUrl: '\/register'/);
     });
 
+    it('does not tell one with no profile either to wait for an HR approval', () => {
+        // The sign-up makes the account, then the profile, then the record; a
+        // failure before the profile left an account the HR gate called
+        // "Pending Approval", which nobody can ever approve.
+        const gate = login.slice(login.indexOf("if (user.role === 'student') {"), login.indexOf("if (verificationStatus === 'pending')"));
+        expect(gate).toContain("else if (!(await loginIdentity.findStudentByEmail(Student, user.email))) verificationStatus = 'unfinished';");
+    });
+
     it.each(['public/login.html', 'public/student-login.html'])('%s offers the way to finish', (page) => {
         const src = fs.readFileSync(path.join(root, page), 'utf8');
         expect(src).toContain('if (data.noInternship)');
@@ -86,5 +94,24 @@ describe('the owner of a half-made account can register again', () => {
 
     it('otherwise still answers "Email already registered"', () => {
         expect(CTRL).toMatch(/\} else if \(existingEco \|\| existingStudent \|\| existingHR \|\| existingCoord\) \{\s*return res\.status\(409\)/);
+    });
+});
+
+/*
+ * Registering again needs the same password, and these accounts can be months
+ * old. Forgot password already fell back to the account row for them, but the
+ * row had nowhere to keep the token and the reset page never looked there, so
+ * the emailed link always said "Invalid or already-used reset link".
+ */
+describe('the owner of a half-made account can reset a forgotten password first', () => {
+    it('the account row can hold a reset token', () => {
+        const EcosystemUser = require(path.join(root, 'models/EcosystemUser'));
+        expect(EcosystemUser.schema.path('passwordResetToken')).toBeTruthy();
+        expect(EcosystemUser.schema.path('passwordResetExpiry')).toBeTruthy();
+    });
+
+    it('the reset page looks for a student token on the account row too', () => {
+        const reset = SERVER.slice(SERVER.indexOf('app.post("/auth/reset-password"'));
+        expect(reset.slice(0, 1200)).toMatch(/if\(!user && role === "student"\) user = await EcosystemUser\.findOne\(\{ passwordResetToken: token \}\);/);
     });
 });

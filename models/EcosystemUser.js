@@ -25,6 +25,15 @@ const EcosystemUserSchema = new mongoose.Schema({
   activeSessionToken: { type: String, default: null },
   lastLoginAt: { type: Date, default: null },
   /*
+   * Forgot password. A student whose sign-up stopped before the internship
+   * record was made has only this row, and /auth/forgot-password falls back to
+   * it, so the reset token must be able to live here. Without these fields
+   * Mongoose dropped the token on save and the emailed link said "Invalid or
+   * already-used reset link".
+   */
+  passwordResetToken:  { type: String, default: null },
+  passwordResetExpiry: { type: Date, default: null },
+  /*
    * The one domain a learner is taking in the LLM portal.
    *
    * The portal used to show all fifteen modules to everybody, which is fifteen
