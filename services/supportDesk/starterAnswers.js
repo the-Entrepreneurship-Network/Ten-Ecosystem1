@@ -32,7 +32,8 @@ module.exports = [
             'i filled the google form but did not get employee id', 'request for employee id', 'could you please share my employee id to complete my onboarding', 'i joined as an intern please share my employee id',
             'i am shortlisted please provide my employee id', 'got shortlisted mail need my employee id',
             'i joined the group and filled the google form when will i get my employee id', 'when will i get my employee id',
-            'employee id is not in the shared documents', 'employee id not mentioned in my documents', 'i have recently joined please provide my employee id', 'need employee id to get my offer letter and documents'
+            'employee id is not in the shared documents', 'employee id not mentioned in my documents', 'i have recently joined please provide my employee id', 'need employee id to get my offer letter and documents',
+            'following up on my onboarding i have not received my employee id', 'update on when i will get my employee id', 'still waiting for my employee id after onboarding'
         ],
         answer: 'You get your Employee ID the moment you register. It looks like TEN/WEB/1005, and you will find it in ' +
             'your welcome email and at the top of your dashboard.\n\n' +
