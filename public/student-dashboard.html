@@ -14,6 +14,7 @@
 <meta name="apple-mobile-web-app-title" content="TEN Portal">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
 <title>TEN — Student Dashboard</title>
+<meta name="robots" content="noindex">
 <link rel="stylesheet" href="ten-theme.css">
 <link rel="stylesheet" href="ten-motion.css">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -2042,7 +2043,7 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
         </div>
       </div>
       <div class="meet-link-wrap">
-        <a id="meetLink" href="#" target="_blank">Join Meeting</a>
+        <a id="meetLink" href="#" target="_blank" rel="noopener">Join Meeting</a>
       </div>
     </div>
   </div>
@@ -3484,9 +3485,9 @@ function renderSubmissions(submissions){
       <p><b>Note :</b> ${sub.note || "No note"}</p>
       <span class="status-pill ${getStatusClass(sub.status)}">${sub.status}</span>
       <div class="links">
-        <a href="${sub.githubLink || '#'}" target="_blank">GitHub</a>
-        <a href="${sub.image || '#'}" target="_blank">Screenshot</a>
-        <a href="${sub.pdf || '#'}" target="_blank">PDF</a>
+        <a href="${sub.githubLink || '#'}" target="_blank" rel="noopener">GitHub</a>
+        <a href="${sub.image || '#'}" target="_blank" rel="noopener">Screenshot</a>
+        <a href="${sub.pdf || '#'}" target="_blank" rel="noopener">PDF</a>
       </div>
       ${aiPrecheckLine(sub, reviewed)}
       <div class="review-box" style="margin-top:12px;">
@@ -4493,16 +4494,16 @@ async function loadCodingProblems(){
         </p>
         <p style="font-size:13px;color:#8a9ab4;margin-bottom:16px;">In the meantime, sharpen your skills on these free platforms:</p>
         <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:12px;margin-bottom:24px;">
-          <a href="https://leetcode.com" target="_blank" class="empty-state-link" style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.25);border-radius:20px;padding:8px 16px;font-size:13px;color:#D4AF37;text-decoration:none;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(212,175,55,0.15)'" onmouseout="this.style.background='rgba(212,175,55,0.08)'">
+          <a href="https://leetcode.com" target="_blank" rel="noopener" class="empty-state-link" style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.25);border-radius:20px;padding:8px 16px;font-size:13px;color:#D4AF37;text-decoration:none;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(212,175,55,0.15)'" onmouseout="this.style.background='rgba(212,175,55,0.08)'">
             <span>💻</span> LeetCode
           </a>
-          <a href="https://www.hackerrank.com" target="_blank" class="empty-state-link" style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.25);border-radius:20px;padding:8px 16px;font-size:13px;color:#D4AF37;text-decoration:none;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(212,175,55,0.15)'" onmouseout="this.style.background='rgba(212,175,55,0.08)'">
+          <a href="https://www.hackerrank.com" target="_blank" rel="noopener" class="empty-state-link" style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.25);border-radius:20px;padding:8px 16px;font-size:13px;color:#D4AF37;text-decoration:none;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(212,175,55,0.15)'" onmouseout="this.style.background='rgba(212,175,55,0.08)'">
             <span>🏆</span> HackerRank
           </a>
-          <a href="https://www.codechef.com" target="_blank" class="empty-state-link" style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.25);border-radius:20px;padding:8px 16px;font-size:13px;color:#D4AF37;text-decoration:none;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(212,175,55,0.15)'" onmouseout="this.style.background='rgba(212,175,55,0.08)'">
+          <a href="https://www.codechef.com" target="_blank" rel="noopener" class="empty-state-link" style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.25);border-radius:20px;padding:8px 16px;font-size:13px;color:#D4AF37;text-decoration:none;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(212,175,55,0.15)'" onmouseout="this.style.background='rgba(212,175,55,0.08)'">
             <span>🍴</span> CodeChef
           </a>
-          <a href="https://www.geeksforgeeks.org" target="_blank" class="empty-state-link" style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.25);border-radius:20px;padding:8px 16px;font-size:13px;color:#D4AF37;text-decoration:none;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(212,175,55,0.15)'" onmouseout="this.style.background='rgba(212,175,55,0.08)'">
+          <a href="https://www.geeksforgeeks.org" target="_blank" rel="noopener" class="empty-state-link" style="display:inline-flex;align-items:center;gap:6px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.25);border-radius:20px;padding:8px 16px;font-size:13px;color:#D4AF37;text-decoration:none;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(212,175,55,0.15)'" onmouseout="this.style.background='rgba(212,175,55,0.08)'">
             <span>🌐</span> GeeksforGeeks
           </a>
         </div>
@@ -5899,18 +5900,18 @@ document.addEventListener('keydown', function(e) {
       <div style="display:flex;flex-direction:column;gap:16px;">
         <button onclick="wizardSelectType('new')" style="display:flex;align-items:center;gap:16px;width:100%;padding:18px 24px;background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.3);border-radius:16px;color:#fff;cursor:pointer;transition:all 0.3s;text-align:left;" onmouseover="this.style.background='rgba(212,175,55,0.12)';" onmouseout="this.style.background='rgba(212,175,55,0.06)';">
           <span style="font-size:24px;">🆕</span>
-          <div>
-            <div style="font-weight:700;color:#D4AF37;font-size:15px;">New Joiner</div>
-            <div style="font-size:12px;color:#8aa4c8;margin-top:2px;">Complete guidelines &amp; start fresh.</div>
-          </div>
+          <span style="display:block;">
+            <span style="display:block;font-weight:700;color:#D4AF37;font-size:15px;">New Joiner</span>
+            <span style="display:block;font-size:12px;color:#8aa4c8;margin-top:2px;">Complete guidelines &amp; start fresh.</span>
+          </span>
         </button>
         
         <button onclick="wizardSelectType('whatsapp')" style="display:flex;align-items:center;gap:16px;width:100%;padding:18px 24px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.3);border-radius:16px;color:#fff;cursor:pointer;transition:all 0.3s;text-align:left;" onmouseover="this.style.background='rgba(16,185,129,0.12)';" onmouseout="this.style.background='rgba(16,185,129,0.06)';">
           <span style="font-size:24px;">💬</span>
-          <div>
-            <div style="font-weight:700;color:#10b981;font-size:15px;">WhatsApp Group Joiner</div>
-            <div style="font-size:12px;color:#8aa4c8;margin-top:2px;">Existing joiner migrating to the portal.</div>
-          </div>
+          <span style="display:block;">
+            <span style="display:block;font-weight:700;color:#10b981;font-size:15px;">WhatsApp Group Joiner</span>
+            <span style="display:block;font-size:12px;color:#8aa4c8;margin-top:2px;">Existing joiner migrating to the portal.</span>
+          </span>
         </button>
       </div>
     </div>

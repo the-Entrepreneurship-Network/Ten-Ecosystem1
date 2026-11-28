@@ -298,6 +298,32 @@ loads.
 (`/hr/dashboard`), `/hr-control-center`, `dashboard.html` and `edit.html`
 (both replaced by `/ten-admin`), `public/script.js`.
 
+### 6.5 What search engines see
+
+- `public/robots.txt` lets every crawler in and names `public/sitemap.xml`.
+  The sitemap lists the public pages only, each at its canonical URL. A new
+  public page goes in the sitemap and gets a `<link rel="canonical">` and a
+  `<meta name="description">` (50–160 characters) after its `<title>`.
+- Signed-in and staff pages (dashboards, `my-*`, `hr-*`, `ten-admin*`,
+  payment pages, `test.html`, `v2-tasks.html` and the like) carry
+  `<meta name="robots" content="noindex">`. That is deliberate: signed out,
+  they are a login form, which is all Google would index.
+- One URL per page. Several pages are served at two addresses (`/` and
+  `/index.html`, `/register` and `/register.html`, `/verify-document` and
+  `verify.html`); the canonical link names the one we want (`/`,
+  `/register.html`, `/verify-document`) and internal links use that one, so a
+  crawler does not report two pages with the same title.
+- The job and resume portals redirect signed-out visitors to `/login.html`,
+  so they are not in the sitemap. The four single-page apps render their
+  `<h1>` in JavaScript; Google runs it, and a `<noscript>` heading covers
+  everyone else.
+- `tests/public/seoSitemap.test.js` checks that every sitemap URL is
+  indexable, names itself as canonical and has a description, and that the
+  portal source and build agree on the canonical.
+- A `<button>` may only hold inline content: the register role cards and the
+  dashboard's onboarding buttons use `<span class="block">` where a `<div>`,
+  `<h3>` or `<p>` would be invalid HTML.
+
 ---
 
 ## 7. Features, area by area

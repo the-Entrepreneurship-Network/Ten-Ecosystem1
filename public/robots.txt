@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://virtualinternships.entrepreneurshipnetwork.net/sitemap.xml

@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Documents — TEN Portal</title>
+<meta name="robots" content="noindex">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="/session-guard.js"></script>
 <script src="/credential-reset.js"></script>
@@ -278,7 +279,7 @@ async function loadStatus() {
     let desc = cfg.desc;
     if (d.status === 'rejected' && d.rejectionReason) desc += `<br><small style="opacity:0.8">Reason: ${d.rejectionReason}</small>`;
     if (d.status === 'approved' && d.offer_letter_url) {
-      desc += ` <a href="${d.offer_letter_url}" target="_blank" class="download-btn" style="margin-left:12px;font-size:12px;">⬇ Download Offer Letter</a>`;
+      desc += ` <a href="${d.offer_letter_url}" target="_blank" rel="noopener" class="download-btn" style="margin-left:12px;font-size:12px;">⬇ Download Offer Letter</a>`;
     }
     showBanner(d.status, desc);
     if (d.addressProofUrl) markExistingFile('address', d.addressProofUrl);
@@ -577,14 +578,14 @@ function renderStarSubmitForm(data) {
             detailsHTML = `
               <div style="margin-top:8px;padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;font-size:12px">
                 <p style="color:#60a5fa;margin-bottom:4px"><strong>🛠️ Tech Contribution Track</strong></p>
-                <p style="color:#94a3b8"><strong>PR Link:</strong> <a href="${contrib.githubPR}" target="_blank" style="color:#60a5fa">${contrib.githubPR}</a></p>
+                <p style="color:#94a3b8"><strong>PR Link:</strong> <a href="${contrib.githubPR}" target="_blank" rel="noopener" style="color:#60a5fa">${contrib.githubPR}</a></p>
                 <p style="color:#94a3b8"><strong>GitHub User:</strong> ${contrib.githubUsername}</p>
               </div>`;
           } else {
             detailsHTML = `
               <div style="margin-top:8px;padding:12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;font-size:12px">
                 <p style="color:#fbbf24;margin-bottom:4px"><strong>📈 Business Contribution Track (${contrib.businessDomain})</strong></p>
-                <p style="color:#94a3b8"><strong>Proposal Document:</strong> <a href="${contrib.businessLink}" target="_blank" style="color:#60a5fa">${contrib.businessLink}</a></p>
+                <p style="color:#94a3b8"><strong>Proposal Document:</strong> <a href="${contrib.businessLink}" target="_blank" rel="noopener" style="color:#60a5fa">${contrib.businessLink}</a></p>
               </div>`;
           }
         } else {
