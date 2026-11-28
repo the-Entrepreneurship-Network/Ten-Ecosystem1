@@ -322,6 +322,18 @@ describe('an address that cannot receive mail is not a contact', () => {
     expect(await discovery.hasMx('no-such-domain-for-ten-tests-xyz123.ac.in')).toBe(false);
   });
 
+  test('a resolver failure answers what the caller asked for, and is not remembered', async () => {
+    const dns = require('dns').promises;
+    const servfail = Object.assign(new Error('servfail'), { code: 'ESERVFAIL' });
+    const spy = jest.spyOn(dns, 'resolveMx').mockRejectedValue(servfail);
+    try {
+      expect(await discovery.hasMx('blip-test-ten.in')).toBe(false);                    // a send list skips it
+      expect(await discovery.hasMx('blip-test-ten.in', { unknown: null })).toBeNull();  // a read list keeps it
+      spy.mockResolvedValue([{ exchange: 'mx.blip-test-ten.in', priority: 10 }]);
+      expect(await discovery.hasMx('blip-test-ten.in')).toBe(true);                     // the blip was not cached
+    } finally { spy.mockRestore(); }
+  });
+
   test('nonsense input is false, never a throw', async () => {
     expect(await discovery.hasMx('')).toBe(false);
     expect(await discovery.hasMx(null)).toBe(false);
@@ -343,7 +355,8 @@ describe('an address that cannot receive mail is not a contact', () => {
     // college for the lifetime of the process.
     const fn = src.slice(src.indexOf('async function hasMx'));
     expect(fn).toMatch(/code === 'ENOTFOUND'/);
-    expect(fn).toMatch(/if \(code !== 'ENODATA'\) return false;/);
+    expect(fn).toMatch(/if \(code !== 'ENODATA'\) return unknown;/);
+    expect(fn).toMatch(/\{ unknown = false \} = \{\}/);   // a send list still skips what it cannot confirm
   });
 
   test('a domain with an A record but no MX still counts — RFC 5321', () => {

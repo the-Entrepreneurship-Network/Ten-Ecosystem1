@@ -534,6 +534,18 @@ From the sidebar of `hr-portal.html`:
 - `node scripts/probe-ats-boards.js` on the server lists which Indian company
   boards answer; add those to `BOARDS` in `services/v2/atsBoards.js`. None are
   listed yet because none could be checked.
+- **Recruiter contacts are only what the employer published.** The table reads
+  each posting's own text, including an address behind a link ("write to
+  <a href=mailto:…>our team</a>" keeps the address beside its words). An
+  address is left out when its domain has no mail server (`hasMx`, the college
+  agent's check, called with `{ unknown: null }` so a slow or failing resolver
+  hides nothing; only a confirmed domain is marked `mailChecked`). Nothing is
+  scraped from profiles and no paid lookup is used.
+- Each opening has "Recruiters at <company>", a LinkedIn people search the
+  student runs signed in as themselves, and "<college> alumni there" when the
+  resume names a college. The server fetches neither.
+- The send step has "Open in Gmail" and "Open in my mail app": a draft to the
+  recruiter from the student's own mailbox, resume attached by them.
 
 **Hackathon portal** (`routes/v2/hackathons.js`)
 - A public board; teams register with UPI payment and get a team code.

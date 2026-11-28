@@ -132,6 +132,16 @@ function passes(j: Job, f: Filters): boolean {
 /* India first; freelance marketplaces are not job searches. */
 const SEARCH_ORDER = ['Naukri', 'LinkedIn', 'Internshala', 'Unstop', 'Wellfound', 'Foundit (Monster)', 'Indeed', 'Instahyre', 'Cutshort', 'Hirist', 'Google Jobs'];
 
+/* LinkedIn's own people search, opened in the student's account: TEN reads
+   nothing from LinkedIn and stores nothing it shows. */
+const people = (q: string) => `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(q)}`;
+/* The drafted email in the student's own mail, so it goes from their address
+   and the reply comes back to them. */
+const gmailUrl = (to: string, subject: string, body: string) =>
+  `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+const mailtoUrl = (to: string, subject: string, body: string) =>
+  `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
 function loadTracker(): TrackRow[] {
   try { return JSON.parse(localStorage.getItem(TRACKER_KEY) || '[]'); } catch { return []; }
 }
@@ -147,7 +157,7 @@ function upsertTrack(rows: TrackRow[], row: Omit<TrackRow, 'date'>): TrackRow[] 
   return [{ ...row, date: new Date().toISOString().slice(0, 10) }, ...rows].slice(0, 100);
 }
 
-type Profile = { name: string | null; role: string; seniority: string; location: string; skills: string[] };
+type Profile = { name: string | null; role: string; seniority: string; location: string; skills: string[]; college?: string };
 type Fit = { percent: number; band: string; advice: string; confidence: number; reasons: string[] };
 type Job = {
   source: string; title: string; company: string; location: string; type: string;
@@ -558,6 +568,18 @@ export default function JobAgent() {
                           >
                             {tracked(j) ? 'Tracked ✓' : 'Save to tracker'}
                           </button>
+                          {j.company && (
+                            <a href={people(`${j.company} recruiter`)} target="_blank" rel="noopener noreferrer"
+                               className="rounded-lg border border-sky-300/25 px-3 py-1.5 text-[12px] text-sky-200/90 hover:border-sky-300/60">
+                              Recruiters at {j.company} ↗
+                            </a>
+                          )}
+                          {j.company && profile?.college && (
+                            <a href={people(`${j.company} ${profile.college}`)} target="_blank" rel="noopener noreferrer"
+                               className="rounded-lg border border-sky-300/25 px-3 py-1.5 text-[12px] text-sky-200/90 hover:border-sky-300/60">
+                              {profile.college} alumni there ↗
+                            </a>
+                          )}
                           {j.jobId && <span className="text-[10.5px] text-white/30">{j.jobId}</span>}
                         </div>
                       </div>
@@ -584,15 +606,18 @@ export default function JobAgent() {
                   </div>
                   <p className="mb-4 text-[12px] leading-relaxed text-white/45">
                     Contacts the hiring team put in their own advert — the "send your CV to…" line.
-                    Every row links to the posting it came from. Nothing is guessed and nothing is
-                    taken from anyone's profile, so what you see is what a company asked you to use.
+                    Every row links to the posting it came from, and an email is left out when its
+                    domain cannot receive mail. Nothing is guessed and nothing is taken from anyone's profile, so
+                    what you see is what a company asked you to use. To find the people hiring at a
+                    company, use "Recruiters at …" on its opening: it searches LinkedIn as you.
                   </p>
 
                   {recruiters.length === 0 ? (
                     <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-[13px] leading-relaxed text-white/55">
                       None of this hunt's postings published a direct contact — most large employers
                       route everything through their apply button. Use the green link on a row and
-                      the agent's cold email; when a posting does name a recruiter, they appear here.
+                      the agent's cold email, or "Recruiters at …" to find the hiring team on LinkedIn;
+                      when a posting does name a recruiter, they appear here.
                     </p>
                   ) : (
                     <div className="overflow-x-auto rounded-2xl border border-white/10">
@@ -882,6 +907,20 @@ function MaterialsPanel({ data, onClose, onEmailed }: { data: Materials; onClose
                 {sendState === 'sending' ? 'Sending…' : `Send to ${outreach?.to}`}
               </button>
             )}
+          </div>
+
+          {/* From the student's own address: the reply comes back to them, and
+              nothing is sent until they press send there. */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <a href={gmailUrl(to, data.coldEmail.subject, data.coldEmail.body)} target="_blank" rel="noopener noreferrer"
+               className="rounded-lg border border-white/20 px-3 py-1.5 text-[12px] font-semibold text-white/85 hover:border-white/50">
+              Open in Gmail
+            </a>
+            <a href={mailtoUrl(to, data.coldEmail.subject, data.coldEmail.body)}
+               className="rounded-lg border border-white/20 px-3 py-1.5 text-[12px] font-semibold text-white/85 hover:border-white/50">
+              Open in my mail app
+            </a>
+            <span className="text-[11px] text-white/40">Sends from your own address, so the reply comes to you. Attach your resume there.</span>
           </div>
 
           {sendState === 'ready' && (
