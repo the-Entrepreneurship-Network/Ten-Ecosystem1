@@ -794,13 +794,35 @@ async function uploadFile(type, file) {
     return Swal.fire({ icon: 'error', title: 'File too large', text: 'Maximum file size is 25MB', background: '#0e1428', color: '#F0EEE8' });
   }
   const endpoint = type === 'address' ? '/api/v2/documents/upload-address-proof' : '/api/v2/documents/upload-marksheet';
+  // Read the file into memory BEFORE sending it. On Android, a PDF chosen from
+  // Google Drive, WhatsApp or another app is only a pointer the browser reads
+  // while it sends; when that read fails, fetch() throws exactly as if the
+  // network had dropped, and the student was told "Could not reach the server"
+  // on every try, however small the file and good the connection.
+  let body;
+  try {
+    body = new Blob([await file.arrayBuffer()], { type: 'application/pdf' });
+  } catch (_) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Could not open the file',
+      text: 'Your phone did not let the browser read this PDF. Save it to your phone first (for example in Downloads), then choose it again from there.',
+      background: '#0e1428', color: '#F0EEE8'
+    });
+  }
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('file', body, file.name);
   formData.append('employeeId', EMP_ID);
   document.getElementById('progress-' + type).style.display = 'block';
   animateBar(type);
   try {
-    const r = await fetch(endpoint, { method: 'POST', headers: { 'x-employee-id': EMP_ID }, body: formData });
+    let r;
+    try {
+      r = await fetch(endpoint, { method: 'POST', headers: { 'x-employee-id': EMP_ID }, body: formData });
+    } catch (_) {
+      // One quiet retry: a mobile connection that drops once usually holds the second time.
+      r = await fetch(endpoint, { method: 'POST', headers: { 'x-employee-id': EMP_ID }, body: formData });
+    }
     let d;
     try {
       d = await r.json();
