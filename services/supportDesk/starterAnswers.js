@@ -98,7 +98,7 @@ module.exports = [
         question: "I can't log in to the portal",
         examples: [
             "i can't login", 'unable to login', 'login not working', 'how to login to the student portal',
-            'invalid employee id error', 'login nahi ho raha', 'which id should i use to login', 'my account is locked', 'login page link'
+            'login nahi ho raha', 'which id should i use to login', 'my account is locked', 'login page link'
         ],
         answer: 'Sign in at {{loginUrl}} with your email address or your Employee ID (for example TEN/WEB/1005), and the ' +
             'password you chose when you registered. Your Member ID (TEN-STU-…) does not work for signing in.\n\n' +
@@ -108,6 +108,26 @@ module.exports = [
             'you chose when you registered.\n\n' +
             'After 5 wrong passwords the account locks for 15 minutes, so wait a little and try again. If you have ' +
             'forgotten your password, use "Forgot password?" on the sign-in page.'
+    },
+    {
+        key: 'invalid-employee-id',
+        question: 'Signing in says "Invalid Employee ID" or "No portal account has this Employee ID"',
+        examples: [
+            'invalid employee id error', 'access denied invalid employee id', 'login says invalid employee id',
+            'it shows invalid employee id when i sign in', 'my employee id is not working for login',
+            'employee id from my offer letter does not work', 'no portal account has this employee id',
+            'employee id not accepted on the login page', 'sign in says employee id is invalid'
+        ],
+        answer: 'That message means no portal account has the ID you typed. The Employee ID on an offer letter or a ' +
+            'WhatsApp message is not always the one the portal gave you.\n\n' +
+            'Sign in at {{loginUrl}} with the email address you registered with instead, and your password. Your portal ' +
+            'Employee ID (like TEN/WEB/1005) is in your welcome email and at the top of your dashboard. If you have ' +
+            'forgotten your password, use "Forgot password?" on the sign-in page.\n\n' +
+            'Not registered on the portal yet? Register at {{registerUrl}} with your email address, and you get your ' +
+            'Employee ID straight away.',
+        personal: 'Please sign in at {{loginUrl}} with this email address, or with your portal Employee ID, ' +
+            '{{employeeId}}, and your password. The ID on an offer letter or a WhatsApp message is not always the ' +
+            'one the portal gave you. If you have forgotten your password, use "Forgot password?" on the sign-in page.'
     },
     {
         key: 'login-loop',

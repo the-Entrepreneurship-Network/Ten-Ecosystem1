@@ -517,6 +517,22 @@
         }, 1200);
 
       } else {
+      if (data.unknownEmployeeId) {
+        // No account has the ID typed: usually one from a letter or WhatsApp,
+        // not the portal's. Point to the email sign-in and to registering.
+        Swal.fire({
+          icon: "info",
+          title: "Employee ID not found",
+          text: data.message,
+          showCancelButton: true,
+          confirmButtonText: "Register now",
+          cancelButtonText: "Sign in with email",
+          background: "#0e1428",
+          color: "#F0EEE8",
+          confirmButtonColor: "#D4AF37"
+        }).then((r) => { if (r.isConfirmed) window.location.href = data.registerUrl || "/register"; });
+        return;
+      }
       if (data.noInternship) {
         // A half-finished sign-up: send them to finish it rather than show a bare error.
         Swal.fire({

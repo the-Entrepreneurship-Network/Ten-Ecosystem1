@@ -3947,6 +3947,13 @@ app.post("/logout", (req, res) => {
     });
 });
 
+// What /login says when no student has the Employee ID that was typed.
+const UNKNOWN_EMPLOYEE_ID_MESSAGE =
+    "No portal account has this Employee ID. The ID on an offer letter or a WhatsApp message is not always " +
+    "the one the portal gave you. Sign in with the email address you registered with instead: your portal " +
+    "Employee ID (like TEN/WEB/1005) is in your welcome email and at the top of your dashboard. " +
+    "Not registered on the portal yet? Register first.";
+
 app.post("/login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     let mentorProfileObj = null;
@@ -4270,7 +4277,11 @@ try{
         // "ten/web/1005" and "TEN-WEB-1005" both found nothing.
         const student = await loginIdentity.findStudentByEmployeeId(Student, loginId);
         if (!student) {
-            return res.json({ success: false, message: "Invalid Employee ID" });
+            // A bare "Invalid Employee ID" was a dead end. The ID students type
+            // is often not a portal ID at all: one on a letter made by hand in
+            // the HR portal (TEN/AM/10976 and the like), or one from a WhatsApp
+            // list, never existed here. Say what to do instead.
+            return res.json({ success: false, unknownEmployeeId: true, registerUrl: '/register', message: UNKNOWN_EMPLOYEE_ID_MESSAGE });
         }
 
         if (await checkLockout(res, student, Student)) return;
