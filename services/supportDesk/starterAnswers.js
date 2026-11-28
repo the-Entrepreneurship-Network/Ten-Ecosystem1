@@ -36,7 +36,8 @@ module.exports = [
             'i didn\'t get employe id', 'didnt get employe id', 'employe id not received', 'i dont have my employe id', 'no employe id yet', 'i didnt get any employee id so far', 'have not received any employee id so far',
             'my name is not in the employee id spreadsheet', 'filled the employee id generation form but no id', 'name not appearing in employee id sheet',
             'employee id form response recorded but no id', 'please verify my employee id form submission',
-            'following up on my onboarding i have not received my employee id', 'update on when i will get my employee id', 'still waiting for my employee id after onboarding'
+            'i am new here please provide my employee id', 'got your email from the group please give me employee id', 'there was a list of employee ids but my name was not there', 'my name is not on the employee id list', 'following up on my onboarding i have not received my employee id', 'update on when i will get my employee id', 'still waiting for my employee id after onboarding',
+            'i am a student of internship i don\'t get employe i\'d', 'i don\'t get employe i\'d please provide', 'please provide employe i\'d as soon as possible', 'intern student no employe i\'d'
         ],
         answer: 'You get your Employee ID the moment you register. It looks like TEN/WEB/1005, and you will find it in ' +
             'your welcome email and at the top of your dashboard.\n\n' +
@@ -377,6 +378,24 @@ module.exports = [
             'Coordinator" button.\n' +
             '• The chat buttons at the bottom right open your Domain Chat (your coordinator and domain) and General Chat (HR).\n' +
             '• Messages, in the sidebar, lets you write privately to a coordinator or to HR.'
+    },
+    {
+        key: 'internship-role',
+        question: 'What is my official designation, who is my mentor, and which team do I join?',
+        examples: [
+            'what is my designation', 'what is my official role', 'what title should i put on linkedin',
+            'designation not mentioned in offer letter', 'who is my mentor', 'who is my assigned mentor',
+            'which team should i join', 'team allocation', 'where will i get my tasks and instructions',
+            'clarification regarding internship role mentor and team'
+        ],
+        answer: 'Your offer letter confirms a position as an intern at The Entrepreneurship Network (TEN), in the ' +
+            'Domain shown in the box on the letter. On your resume and LinkedIn, use "<your Domain> Intern" at The ' +
+            'Entrepreneurship Network (TEN), with the Domain written exactly as on your letter.\n\n' +
+            'Your mentor and point of contact is your domain coordinator: the "My Coordinator" card on your dashboard ' +
+            'shows their name, email and WhatsApp number.\n\n' +
+            'Your team is your domain group. Open Guidelines, then Communication & Support, on the dashboard to join ' +
+            "your domain's WhatsApp group. Your weekly tasks are in 🪙 Task Journey, and tasks your coordinator posts " +
+            'are under My Tasks.'
     },
     {
         key: 'whatsapp-group',
