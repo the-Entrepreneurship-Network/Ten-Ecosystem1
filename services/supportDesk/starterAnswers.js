@@ -32,7 +32,7 @@ module.exports = [
             'i filled the google form but did not get employee id', 'request for employee id', 'could you please share my employee id to complete my onboarding', 'i joined as an intern please share my employee id',
             'i am shortlisted please provide my employee id', 'got shortlisted mail need my employee id',
             'i joined the group and filled the google form when will i get my employee id', 'when will i get my employee id',
-            'employee id is not in the shared documents', 'employee id not mentioned in my documents', 'i have recently joined please provide my employee id', 'need employee id to get my offer letter and documents', 'i do not know what my employee id is',
+            'employee id is not in the shared documents', 'employee id not mentioned in my documents', 'i have recently joined please provide my employee id', 'need employee id to get my offer letter and documents', 'i was selected on unstop but did not get employee id', 'selected for internship on unstop where is my employee id', 'applied on unstop got selected no employee id or offer letter', 'shortlisted on unstop what to do next', 'selected through internshala but no employee id', 'i do not know what my employee id is',
             'i didn\'t get employe id', 'didnt get employe id', 'employe id not received', 'i dont have my employe id', 'no employe id yet', 'i didnt get any employee id so far', 'have not received any employee id so far',
             'my name is not in the employee id spreadsheet', 'filled the employee id generation form but no id', 'name not appearing in employee id sheet',
             'employee id form response recorded but no id', 'please verify my employee id form submission',
@@ -41,6 +41,8 @@ module.exports = [
         answer: 'You get your Employee ID the moment you register. It looks like TEN/WEB/1005, and you will find it in ' +
             'your welcome email and at the top of your dashboard.\n\n' +
             'Not registered yet? Register here: {{registerUrl}}\n\n' +
+            'Selected on Unstop, Internshala or another job site? That does not register you here, so you still need to ' +
+            'register at the link above with the same email address to get your Employee ID.\n\n' +
             "Already registered but can't find it? Sign in with your email address at {{loginUrl}}, and it is at the top of your dashboard.",
         personal: 'Your Employee ID is {{employeeId}}. You can also see it at the top of your dashboard after signing in at {{loginUrl}}.'
     },
