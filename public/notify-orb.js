@@ -155,7 +155,18 @@
       // get the orb and the count, just no shaking.
       '@media (prefers-reduced-motion:reduce){',
       '#ten-orb,#ten-orb.buzz{animation:none !important;transition:opacity .2s ease;}',
-      '#ten-orb.in::after{animation:none;}}'
+      '#ten-orb.in::after{animation:none;}}',
+
+      // The one-time "turn on notifications" offer inside the installed app.
+      '#ten-push-offer{position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top));',
+      'max-width:520px;margin:0 auto;z-index:9998;display:flex;flex-wrap:wrap;align-items:center;gap:10px;',
+      'padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#1a2540,#0e1628);',
+      'border:1px solid rgba(245,197,66,.45);box-shadow:0 10px 30px rgba(0,0,0,.35);',
+      "font-family:'Plus Jakarta Sans','Segoe UI',system-ui,sans-serif;font-size:14px;color:#e8edf7;}",
+      '#ten-push-offer span{flex:1 1 200px;}',
+      '#ten-push-offer button{min-height:40px;padding:0 14px;border-radius:10px;font:inherit;font-weight:700;',
+      'cursor:pointer;background:transparent;color:#e8edf7;border:1px solid rgba(245,197,66,.45);}',
+      '#ten-push-offer button[data-a="on"]{background:#f5c542;border-color:#f5c542;color:#0e1628;}'
     ].join('');
     var tag = document.createElement('style');
     tag.id = 'ten-orb-styles';
@@ -461,6 +472,10 @@
         setCount(total, phrase(d));
         state.ready = true;
 
+        // The installed app's icon carries the same number, as any app's does.
+        if (navigator.setAppBadge) (total ? navigator.setAppBadge(total) : navigator.clearAppBadge()).catch(function () {});
+        if (cause === 'first') offerPush();
+
         // Anything that is already on this page is not news. Someone reading
         // their inbox does not need an orb shaking at them about the message
         // they are looking at.
@@ -500,6 +515,47 @@
   }
 
   /** Is the reader already looking at the thing the orb would send them to? */
+  /*
+   * Inside the installed app, offer notifications once, as an app does.
+   *
+   * A website that asks on load gets "Block", and once blocked the browser
+   * never asks again. So: only in the installed app, once per device, only
+   * when the server can actually send, and only from a button the reader
+   * presses. The Notifications page keeps its own switch for later.
+   */
+  var OFFER_KEY = 'ten-push-offer';
+  function offerPush() {
+    var installed = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (!installed || onOwnPage() || !window.TenPush || !('Notification' in window) || Notification.permission !== 'default') return;
+    try { if (localStorage.getItem(OFFER_KEY)) return; } catch (e) { return; }
+    window.TenPush.status().then(function (s) {
+      if (!s.serverEnabled || s.subscribed || document.getElementById('ten-push-offer')) return;
+      var bar = document.createElement('div');
+      bar.id = 'ten-push-offer';
+      bar.setAttribute('role', 'dialog');
+      bar.setAttribute('aria-label', 'Turn on notifications');
+      bar.innerHTML = '<span>Get notified about new messages and updates on this phone.</span>' +
+        '<button type="button" data-a="on">Turn on</button><button type="button" data-a="later">Not now</button>';
+      bar.addEventListener('click', function (e) {
+        var a = e.target && e.target.getAttribute && e.target.getAttribute('data-a');
+        if (!a) return;
+        try { localStorage.setItem(OFFER_KEY, a); } catch (err) {}
+        if (a === 'later') { bar.remove(); return; }
+        var text = bar.querySelector('span');
+        text.textContent = 'Turning on\u2026';
+        Array.prototype.forEach.call(bar.querySelectorAll('button'), function (b) { b.remove(); });
+        window.TenPush.enable().then(function (r) {
+          text.textContent = r.ok ? 'Notifications are on.' : (r.reason || 'Could not turn notifications on.');
+          setTimeout(function () { bar.remove(); }, r.ok ? 2500 : 6000);
+        });
+      });
+      // Never over the outage warning (js/db-banner.js) that owns the top edge.
+      var warn = document.getElementById('ten-db-banner');
+      if (warn && warn.offsetHeight) bar.style.top = (warn.offsetHeight + 8) + 'px';
+      document.body.appendChild(bar);
+    }).catch(function () {});
+  }
+
   function onOwnPage() {
     var p = window.location.pathname;
     return p.indexOf('/notifications') === 0 || p.indexOf('/messages') === 0;
