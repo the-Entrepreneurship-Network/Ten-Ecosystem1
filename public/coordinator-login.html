@@ -93,7 +93,7 @@ body {
 
 .card-title {
   font-family: var(--ten-font-display);
-  font-size: 24px;
+  font-size: 24px !important; /* it is an h1: css/mobile.css shrinks every h1 on phones */
   font-weight: 800;
   letter-spacing: -0.5px;
   margin: 0 0 6px;
@@ -288,7 +288,7 @@ input:-webkit-autofill:active {
 @media (max-width: 500px) {
   body { padding: 16px; }
   .login-card { padding: 28px 20px; }
-  .card-title { font-size: 20px; }
+  .card-title { font-size: 20px !important; }
   .card-footer { padding: 10px 14px; }
 }
 

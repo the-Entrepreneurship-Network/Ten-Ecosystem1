@@ -163,6 +163,9 @@
     .wipe { transform:scaleX(1); animation:none; }
     .glint { animation:none; opacity:0; }
   }
+  /* An h1 for search engines that must look like the rest of the strip,
+     on phones too, where css/mobile.css forces every h1 to 19-21px. */
+  .hero-strip h1 { font:inherit !important; margin:0; }
   .hero-strip { display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#333; padding-bottom:6px; flex-wrap:wrap; gap:8px; }
   .hero-strip a { color:#0a0a0a; text-decoration:none; }
   .hero-strip a:hover { text-decoration:underline; }

@@ -317,6 +317,11 @@ loads.
   so they are not in the sitemap. The four single-page apps render their
   `<h1>` in JavaScript; Google runs it, and a `<noscript>` heading covers
   everyone else.
+- `css/mobile.css` sets every `<h1>` to 19–21px with `!important` on phones.
+  A heading made an `<h1>` that must keep another size needs its own
+  `!important` rule. The home strip, the Sign In and Coordinator Login titles
+  and coordinator sign-up have one (`tests/public/h1PhoneSizes.test.js`).
+  Check a heading change at phone width, not only on desktop.
 - `tests/public/seoSitemap.test.js` checks that every sitemap URL is
   indexable, names itself as canonical and has a description, and that the
   portal source and build agree on the canonical.
