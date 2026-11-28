@@ -410,6 +410,19 @@ module.exports = [
             'Please ask your coordinator or the group admin for the new link, and join with that.'
     },
     {
+        key: 'whatsapp-community-full',
+        question: 'The WhatsApp group or community link says it is full',
+        examples: [
+            'the community is full', 'whatsapp says the group is full', 'cannot join the domain group it is full',
+            'the link says community is full', 'group is full unable to join', 'whatsapp group full ho gaya',
+            'domain group has reached its limit', 'the community has reached its member limit'
+        ],
+        answer: 'WhatsApp limits how many people a group or community can hold, and that one has reached the limit. ' +
+            'It is a WhatsApp limit, not a problem with your account or with the portal.\n\n' +
+            'Please ask your coordinator for the link to the new group for your domain, and join with that. ' +
+            'Until then you can reach your coordinator from the "My Coordinator" card on your dashboard.'
+    },
+    {
         key: 'course-videos',
         question: 'Are the course videos from YouTube? Why pay if videos are free online?',
         examples: [
