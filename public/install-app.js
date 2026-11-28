@@ -1,5 +1,5 @@
 /**
- * "Install app" on the home page.
+ * "Install app" on the home page and under the student dashboard's welcome line.
  *
  * Chrome, Edge and Android fire beforeinstallprompt when the site can be
  * installed; holding the event lets the button open the browser's own install

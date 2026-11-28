@@ -102,6 +102,12 @@ describe('the home page offers to install it', () => {
         expect(home).not.toMatch(/#installWrap\s*\{[^}]*display/);
     });
 
+    it('is on the student dashboard too, where students spend their time', () => {
+        const dash = read(pub('student-dashboard.html'));
+        expect(dash).toMatch(/<div id="installWrap" hidden[^>]*><button type="button" id="installApp"/);
+        expect(dash).toContain('src="/install-app.js"');
+    });
+
     it('opens the browser\'s own install dialog, and says how on an iPhone', () => {
         const js = read(pub('install-app.js'));
         expect(js).toContain('beforeinstallprompt');
