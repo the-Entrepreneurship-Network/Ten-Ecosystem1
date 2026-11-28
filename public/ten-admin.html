@@ -154,6 +154,7 @@
     <div class="nav-item" onclick="showSection('notifications')">📢 Notifications</div>
     <div class="nav-item" onclick="showSection('system')">⚙️ System</div>
     <div class="nav-item" onclick="showSection('interview')">🎓 Interview Room AI</div>
+    <div class="nav-item" onclick="showSection('coordinator-ai')">🧑‍🏫 Coordinator AI</div>
     <div class="nav-item" onclick="showSection('chat')" id="nav-chat">💬 Chat &amp; Reports <span class="nav-badge" id="chatReportBadge" style="display:none">0</span></div>
     <div class="nav-item" onclick="window.location.href='/messages'">✉️ My Messages</div>
     <div class="nav-item" onclick="showSection('auditlog')">📋 Audit Log</div>
@@ -435,7 +436,7 @@
           one already running keeps the AI it started with. If Claude fails on a question, Gemini answers that one.
         </div>
       </div>
-      <div id="interviewAiStatus" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
+      <div id="iaiStatus" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
       <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:16px;max-width:560px;">
         <div class="form-group">
           <label>AI</label>
@@ -453,8 +454,44 @@
           <input id="iaiCap" type="number" min="0" max="100000" step="1">
           <div id="iaiCapCost" style="font-size:12px;color:#94a3b8;margin-top:6px;"></div>
         </div>
-        <button class="btn" onclick="saveInterviewAI()">Save</button>
+        <button class="btn" onclick="saveAI('iai')">Save</button>
         <span id="iaiMsg" style="margin-left:10px;font-size:13px;color:#94a3b8;"></span>
+      </div>
+    </div>
+
+    <!-- Which AI reviews the submissions and writes the interns' feedback:
+         routes/adminPortal.js → /coordinator-ai, services/aiCoordinator.js. -->
+    <div class="section" id="section-coordinator-ai">
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">Which AI reviews the submissions</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
+          It opens each submitted link, compares the work with the task, decides the clear cases and writes the
+          feedback the intern receives. <b style="color:#e2e8f0;">Gemini</b> is free. <b style="color:#e2e8f0;">Claude</b>
+          writes better feedback and is paid per review, from the Anthropic account whose key is
+          <code>ANTHROPIC_API_KEY</code> in the server's .env. It stops at the monthly limit below, and after it Gemini
+          reviews. If Claude fails on a submission, Gemini reviews that one. A change applies from the next review.
+        </div>
+      </div>
+      <div id="caiStatus" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:16px;max-width:560px;">
+        <div class="form-group">
+          <label>AI</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;color:#e2e8f0;font-size:14px;">
+            <label style="display:flex;gap:6px;align-items:center;color:#e2e8f0;font-size:14px;margin:0;"><input type="radio" name="caiEngine" value="gemini" style="width:auto"> Gemini (free)</label>
+            <label style="display:flex;gap:6px;align-items:center;color:#e2e8f0;font-size:14px;margin:0;"><input type="radio" name="caiEngine" value="claude" style="width:auto"> Claude (paid)</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="caiModel">Claude model</label>
+          <select id="caiModel"></select>
+        </div>
+        <div class="form-group">
+          <label for="caiCap">Claude reviews a month, at most</label>
+          <input id="caiCap" type="number" min="0" max="100000" step="1">
+          <div id="caiCapCost" style="font-size:12px;color:#94a3b8;margin-top:6px;"></div>
+        </div>
+        <button class="btn" onclick="saveAI('cai')">Save</button>
+        <span id="caiMsg" style="margin-left:10px;font-size:13px;color:#94a3b8;"></span>
       </div>
     </div>
 
@@ -549,7 +586,8 @@ function showSection(name) {
   if (name === 'hr') loadHRs();
   if (name === 'certificates') loadPendingCerts();
   if (name === 'system') loadSystemInfo();
-  if (name === 'interview') loadInterviewAI();
+  if (name === 'interview') loadAI('iai');
+  if (name === 'coordinator-ai') loadAI('cai');
   if (name === 'attendance') { /* waits for an Employee ID */ }
   if (name === 'documents') loadAdminDocuments();
   if (name === 'chat') loadChatReports('open');
@@ -563,48 +601,59 @@ function showSection(name) {
   if (name === 'overview') loadStats();
 }
 
-// ── Interview Room: which AI ──
-const IAI_NAMES = { 'claude-haiku-5-5': 'Claude Haiku 5.5', 'claude-sonnet-5-5': 'Claude Sonnet 5.5', 'claude-opus-5-5': 'Claude Opus 5.5' };
-let iaiModels = [];
-function iaiCost() {
-  const m = iaiModels.find(x => x.id === document.getElementById('iaiModel').value);
-  const cap = Math.max(0, parseInt(document.getElementById('iaiCap').value, 10) || 0);
-  document.getElementById('iaiCapCost').textContent = m
-    ? `About ₹${m.costPerInterviewInr} an interview, so at most about ₹${Math.round(m.costPerInterviewInr * cap).toLocaleString('en-IN')} a month at this limit. Anthropic's console shows the real spend.`
+// ── Which AI: the Interview Room (iai) and the coordinator's reviews (cai) ──
+const AI_NAMES = { 'claude-haiku-5-5': 'Claude Haiku 5.5', 'claude-sonnet-5-5': 'Claude Sonnet 5.5', 'claude-opus-5-5': 'Claude Opus 5.5' };
+const AI_SWITCH = {
+  iai: { path: '/interview-ai', unit: 'an interview', cost: 'costPerInterviewInr', now: 'New interviews now use',
+         used: 'Claude interviews this month', saved: 'Saved. New interviews use it from now.' },
+  cai: { path: '/coordinator-ai', unit: 'a review', cost: 'costPerReviewInr', now: 'Reviews now use',
+         used: 'Claude reviews this month', saved: 'Saved. The next review uses it.' }
+};
+const aiModels = { iai: [], cai: [] };
+const aiEl = (p, id) => document.getElementById(p + id);
+// Whole rupees, or one decimal under ₹10: 3 Haiku reviews are about ₹0.3, not "₹0".
+const aiRupees = (x) => (x < 10 ? Math.round(x * 10) / 10 : Math.round(x)).toLocaleString('en-IN');
+function aiCost(p) {
+  const c = AI_SWITCH[p];
+  const m = aiModels[p].find(x => x.id === aiEl(p, 'Model').value);
+  const cap = Math.max(0, parseInt(aiEl(p, 'Cap').value, 10) || 0);
+  aiEl(p, 'CapCost').textContent = m
+    ? `About ₹${m[c.cost]} ${c.unit}, so at most about ₹${aiRupees(m[c.cost] * cap)} a month at this limit. Anthropic's console shows the real spend.`
     : '';
 }
-function iaiRender(d) {
-  document.querySelectorAll('input[name=iaiEngine]').forEach(r => { r.checked = r.value === d.engine; });
-  iaiModels = d.models || [];
-  const sel = document.getElementById('iaiModel');
-  sel.innerHTML = iaiModels.map(m => `<option value="${m.id}">${IAI_NAMES[m.id] || m.id} · about ₹${m.costPerInterviewInr} an interview</option>`).join('');
+function aiRender(p, d) {
+  const c = AI_SWITCH[p];
+  document.querySelectorAll(`input[name=${p}Engine]`).forEach(r => { r.checked = r.value === d.engine; });
+  aiModels[p] = d.models || [];
+  const sel = aiEl(p, 'Model');
+  sel.innerHTML = aiModels[p].map(m => `<option value="${m.id}">${AI_NAMES[m.id] || m.id} · about ₹${m[c.cost]} ${c.unit}</option>`).join('');
   sel.value = d.claudeModel;
-  document.getElementById('iaiCap').value = d.claudeMonthlyCap;
-  sel.onchange = iaiCost; document.getElementById('iaiCap').oninput = iaiCost;
-  iaiCost();
+  aiEl(p, 'Cap').value = d.claudeMonthlyCap;
+  sel.onchange = () => aiCost(p); aiEl(p, 'Cap').oninput = () => aiCost(p);
+  aiCost(p);
   const chip = (label, ok, text) => `<div class="stat-card"><div class="label">${label}</div><div class="value" style="font-size:15px;color:${ok ? '#34d399' : '#fbbf24'}">${text}</div></div>`;
   const now = d.engine === 'claude' && !d.claudeReady ? 'Gemini (no Claude key)'
     : d.engine === 'claude' && d.claudeThisMonth >= d.claudeMonthlyCap ? 'Gemini (Claude limit reached)'
-    : d.engine === 'claude' ? (IAI_NAMES[d.claudeModel] || 'Claude') : 'Gemini';
-  document.getElementById('interviewAiStatus').innerHTML =
-    chip('New interviews now use', true, now) +
+    : d.engine === 'claude' ? (AI_NAMES[d.claudeModel] || 'Claude') : 'Gemini';
+  aiEl(p, 'Status').innerHTML =
+    chip(c.now, true, now) +
     chip('Claude key (ANTHROPIC_API_KEY)', d.claudeReady, d.claudeReady ? 'Set' : 'Not set') +
     chip('Gemini key', d.geminiReady, d.geminiReady ? 'Set' : 'Not set') +
-    chip('Claude interviews this month', d.claudeThisMonth < d.claudeMonthlyCap, `${d.claudeThisMonth} of ${d.claudeMonthlyCap}`);
+    chip(c.used, d.claudeThisMonth < d.claudeMonthlyCap, `${d.claudeThisMonth} of ${d.claudeMonthlyCap}`);
 }
-async function loadInterviewAI() {
-  const j = await api('/interview-ai');
-  if (j && j.success) iaiRender(j.data);
-  else document.getElementById('iaiMsg').textContent = (j && j.message) || 'Could not load the setting.';
+async function loadAI(p) {
+  const j = await api(AI_SWITCH[p].path);
+  if (j && j.success) aiRender(p, j.data);
+  else aiEl(p, 'Msg').textContent = (j && j.message) || 'Could not load the setting.';
 }
-async function saveInterviewAI() {
-  const engine = (document.querySelector('input[name=iaiEngine]:checked') || {}).value || '';
-  const msg = document.getElementById('iaiMsg');
+async function saveAI(p) {
+  const engine = (document.querySelector(`input[name=${p}Engine]:checked`) || {}).value || '';
+  const msg = aiEl(p, 'Msg');
   msg.textContent = 'Saving…';
-  const j = await api('/interview-ai', { method: 'POST', body: JSON.stringify({
-    engine, claudeModel: document.getElementById('iaiModel').value, claudeMonthlyCap: parseInt(document.getElementById('iaiCap').value, 10)
+  const j = await api(AI_SWITCH[p].path, { method: 'POST', body: JSON.stringify({
+    engine, claudeModel: aiEl(p, 'Model').value, claudeMonthlyCap: parseInt(aiEl(p, 'Cap').value, 10)
   }) });
-  if (j && j.success) { iaiRender(j.data); msg.textContent = 'Saved. New interviews use it from now.'; }
+  if (j && j.success) { aiRender(p, j.data); msg.textContent = AI_SWITCH[p].saved; }
   else msg.textContent = (j && j.message) || 'Could not save.';
 }
 

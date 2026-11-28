@@ -87,13 +87,17 @@ describe('an AI review is labelled as the AI\'s', () => {
     it('on the coordinator\'s card, which keeps its Approve and Reject buttons', () => {
         const src = read('public/coordinator-dashboard.html');
         expect(src).toContain('${isReviewed && sub.reviewedBy !== "ai"');
-        expect(src).toContain('🤖 The AI Coordinator decided: ${sub.status}. The student can submit again and it is checked afresh; you can change the decision below, and yours is then final.');
-        expect(src).toContain('sub.reviewedBy === "ai" ? "AI Coordinator Feedback" : "Coordinator Feedback"');
+        expect(src).toContain('Reviewed automatically: ${sub.status === "Rejected" ? "changes asked" : "approved"}. The intern can submit again and it is checked afresh; you can change the decision below, and yours is then final.');
+        expect(src).toContain('sub.reviewedBy === "ai" ? "Feedback sent (automatic review)" : "Coordinator Feedback"');
+        expect(src).not.toContain('The AI Coordinator decided');
     });
 
     it('on the student\'s card, with the way to change it', () => {
         const src = read('public/student-dashboard.html');
-        expect(src).toContain("sub.reviewedBy === 'ai' ? '🤖 AI COORDINATOR FEEDBACK' : '📝 COORDINATOR FEEDBACK'");
-        expect(src).toContain('Fix what it asks and submit the task again: the AI checks it again straight away.');
+        // Read as the coordinator's feedback, with a small AI-assisted tag: it never passes for a person.
+        expect(src).toContain("📝 COORDINATOR FEEDBACK${sub.reviewedBy === 'ai' ? ' <span title=\"Reviewed with AI assistance for the coordinator team. Your coordinator can change this decision.\"");
+        expect(src).toContain('>AI-assisted</span>');
+        expect(src).toContain('Make these changes and submit the task again: it is checked again as soon as you do.');
+        expect(src).not.toContain('AI COORDINATOR FEEDBACK');
     });
 });

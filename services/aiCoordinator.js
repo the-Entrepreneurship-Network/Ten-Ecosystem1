@@ -21,10 +21,22 @@ const Coordinator = require('../models/Coordinator');
 const Attendance = require('../models/Attendance');
 const StudentTaskProgress = require('../models/new/StudentTaskProgress');
 const DomainTask = require('../models/new/DomainTask');
+const InterviewSetting = require('../models/InterviewSetting');
+const AiCoordinatorLog = require('../models/AiCoordinatorLog');
+const gemini = require('../utils/gemini');
+const claude = require('../utils/claude');
 const { getAttendanceSummary } = require('../utils/attendanceUtils');
 const { filterByDomain } = require('../utils/attendanceDomain');
+const { istDateKey } = require('../utils/dateKey');
 
 const NAME = 'TEN AI Coordinator';
+/*
+ * Who its messages to students come from: the coordinator team it works for.
+ * NAME stays its name where staff read it (an approver, the summaries). It
+ * never signs as a person, and the student's card marks its reviews as
+ * AI-assisted.
+ */
+const SENDER = 'TEN Coordinator Team';
 const enabled = () => !/^(off|false|0|no)$/i.test(String(process.env.AI_COORDINATOR || 'on').trim());
 
 let hooks = {};
@@ -161,8 +173,76 @@ async function contextFor(student, domain, values) {
     return lines.join('\n');
 }
 
+// ── Which AI writes the reviews: the admin portal's choice ───────────────
+
+/*
+ * Gemini (free) or Claude (paid per review) for the submission pre-check and
+ * the feedback the intern receives (services/submissionPrecheck.js). One
+ * document, _id "coordinator", beside the Interview Room's in
+ * models/InterviewSetting.js. Past the month's limit, without the key, or when
+ * Claude does not answer, Gemini writes it, so a review never waits on Claude.
+ */
+const ENGINE_ID = 'coordinator';
+/** ₹ a review, estimated: about 2,000 tokens in and 800 out at $0.10/$0.50, $2/$10 and $4/$20 a million, ₹90 to the dollar. */
+const REVIEW_COST_INR = { 'claude-haiku-5-5': 0.1, 'claude-sonnet-5-5': 1.2, 'claude-opus-5-5': 2.5 };
+const ENGINE_DEFAULTS = { engine: 'gemini', claudeModel: 'claude-sonnet-5-5', claudeMonthlyCap: 500 };
+const monthStart = (now = new Date()) => new Date(istDateKey(now).slice(0, 7) + '-01T00:00:00+05:30');
+
+async function engineSettings() {
+    const doc = await InterviewSetting.findById(ENGINE_ID).lean();
+    return Object.assign({}, ENGINE_DEFAULTS, doc || {});
+}
+
+/** Claude reviews this calendar month (IST), counted from the pre-check log. */
+const claudeReviewsThisMonth = () => AiCoordinatorLog.countDocuments({ kind: 'precheck', engine: 'claude', createdAt: { $gte: monthStart() } });
+
+/** What the admin portal shows: the choice, the cost of each model, and whether each AI can run. */
+async function engineSummary() {
+    const s = await engineSettings();
+    return {
+        engine: s.engine, claudeModel: s.claudeModel, claudeMonthlyCap: s.claudeMonthlyCap,
+        updatedAt: s.updatedAt || null, updatedBy: s.updatedBy || '',
+        geminiReady: gemini.ready(), claudeReady: claude.ready(), claudeThisMonth: await claudeReviewsThisMonth(),
+        models: claude.MODELS.map((id) => ({ id, costPerReviewInr: REVIEW_COST_INR[id] }))
+    };
+}
+
+async function saveEngine({ engine, claudeModel, claudeMonthlyCap, by }) {
+    if (!['gemini', 'claude'].includes(engine)) return { error: 'Choose Gemini or Claude.' };
+    if (!claude.MODELS.includes(claudeModel)) return { error: 'Choose a Claude model from the list.' };
+    const cap = Number(claudeMonthlyCap);
+    if (!Number.isInteger(cap) || cap < 0 || cap > 100000) return { error: 'The monthly limit is a whole number from 0 to 100000.' };
+    await InterviewSetting.findByIdAndUpdate(ENGINE_ID, { $set: { engine, claudeModel, claudeMonthlyCap: cap, updatedBy: String(by || '').slice(0, 80) } },
+        { upsert: true, new: true, setDefaultsOnInsert: true });
+    return engineSummary();
+}
+
+/** Can any AI write a review on this server? */
+const reviewerReady = () => gemini.ready() || claude.ready();
+
+/**
+ * One review's answer, { out, engine }, or null when no AI can write it:
+ * Claude when chosen, set up and under the month's limit; Gemini otherwise,
+ * and when Claude fails. Throws when the last AI asked fails.
+ */
+async function askReviewer(prompt, geminiSchema, claudeSchema) {
+    const s = await engineSettings().catch(() => ENGINE_DEFAULTS);
+    // A count that fails is read as the limit reached: the bill is never left open.
+    if (s.engine === 'claude' && claude.ready() && await claudeReviewsThisMonth().catch(() => Infinity) < s.claudeMonthlyCap) {
+        try {
+            return { out: await claude.ask(prompt, claudeSchema, s.claudeModel), engine: 'claude' };
+        } catch (err) {
+            if (!gemini.ready()) throw err;
+            console.warn('[ai-coordinator] Claude did not answer; asking Gemini:', err.message);
+        }
+    }
+    if (!gemini.ready()) return null;
+    return { out: await gemini.ask(prompt, geminiSchema), engine: 'gemini' };
+}
+
 module.exports = {
-    NAME, enabled, attach, coordinatorsFor, domainsWithCoordinators, progressOf, attendanceOf, scrub, contextFor,
+    NAME, SENDER, enabled, attach, coordinatorsFor, domainsWithCoordinators, progressOf, attendanceOf, scrub, contextFor,
+    reviewerReady, askReviewer, engineSummary, saveEngine,
     // for tests
     _internal: { STATUS_LABEL }
 };

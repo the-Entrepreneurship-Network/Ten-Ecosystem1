@@ -41,7 +41,14 @@ jest.mock('../../models/Notification', () => function Note(doc) {
     this.$locals = {};
     this.save = async () => { mockNotes.push(this); return this; };
 });
-jest.mock('../../services/aiCoordinator', () => ({ scrub: (s) => String(s).replace(/\b[6-9]\d{9}\b/g, '[phone]') }));
+const mockEngine = { name: 'gemini' };
+jest.mock('../../services/aiCoordinator', () => ({
+    SENDER: 'TEN Coordinator Team',
+    scrub: (s) => String(s).replace(/\b[6-9]\d{9}\b/g, '[phone]'),
+    // The admin portal's choice of AI (tested in aiCoordinator.test.js): Gemini here unless a test says otherwise.
+    reviewerReady: () => mockGemini.ready,
+    askReviewer: async (prompt, schema) => (mockGemini.ready ? { out: await mockGemini.ask(prompt, schema), engine: mockEngine.name } : null)
+}));
 const mockLogs = [];
 jest.mock('../../models/AiCoordinatorLog', () => ({ create: async (row) => { mockLogs.push(row); return row; } }));
 const mockReviewOne = jest.fn(async () => false);
@@ -168,7 +175,8 @@ describe('checking a submission', () => {
         expect(row.feedback).toBe('No Feedback Yet');
         expect(row.aiCheck).toBe(c);
         expect(mockNotes).toHaveLength(1);
-        expect(mockNotes[0]).toMatchObject({ targetType: 'student', targetEmployeeId: 'TEN/WEB/1005', from: 'TEN AI Coordinator' });
+        expect(mockNotes[0]).toMatchObject({ targetType: 'student', targetEmployeeId: 'TEN/WEB/1005', from: 'TEN Coordinator Team' });
+        expect(mockNotes[0].message).not.toMatch(/\bAI\b|will (check|review|message)/i);
         expect(mockNotes[0].$locals.skipEmail).toBe(true);
         // Logged for the daily report.
         expect(mockLogs).toEqual([expect.objectContaining({
@@ -239,11 +247,61 @@ describe('checking a submission', () => {
         expect(mockReviewOne).toHaveBeenCalledTimes(2);
     });
 
+    it('the feedback is the review itself: a promise of a later check or message is taken out', async () => {
+        precheck.checkLink = async () => ({ url: 'https://priya.netlify.app', verdict: 'opens', status: 200 });
+        mockGemini.ready = true;
+        mockEngine.name = 'claude';
+        mockGemini.ask.mockResolvedValue({ match: 'yes', reason: 'ok', decision: 'approve',
+            draft: "Thanks for the landing page! I'll go through your GitHub link and check it from my side. " +
+                'Your index.html is clean and the layout holds on a phone. I will send you a message once I am done.' });
+        add('p1', { githubLink: 'priya.netlify.app' });
+        const c = await precheck.run('p1', { screenshotExpected: false });
+        mockEngine.name = 'gemini';
+        expect(c.draft).toBe('Thanks for the landing page! Your index.html is clean and the layout holds on a phone.');
+        const prompt = mockGemini.ask.mock.calls[0][0];
+        expect(prompt).toContain('no other message follows it');
+        expect(prompt).toContain('never claim to be a person');
+        // Which AI wrote it is kept, and logged: Claude's reviews count towards the month's limit.
+        expect(c.engine).toBe('claude');
+        expect(mockLogs[0]).toMatchObject({ kind: 'precheck', engine: 'claude' });
+    });
+
+    it('an answer that is only promises, or calls the work "not this task" while approving it, waits for a person', async () => {
+        precheck.checkLink = async () => ({ url: 'https://priya.netlify.app', verdict: 'opens', status: 200 });
+        mockGemini.ready = true;
+        mockGemini.ask
+            .mockResolvedValueOnce({ match: 'yes', decision: 'approve', draft: "I'll review it from my side and get back to you." })
+            .mockResolvedValueOnce({ match: 'no', decision: 'approve', draft: 'Great work on this page.' });
+        add('p2', { githubLink: 'priya.netlify.app' });
+        add('p3', { githubLink: 'priya.netlify.app' });
+        expect(await precheck.run('p2', { screenshotExpected: false })).toMatchObject({ by: 'rules' });
+        expect(await precheck.run('p3', { screenshotExpected: false })).toMatchObject({ by: 'rules' });
+    });
+
     it('switched off, it does nothing', async () => {
         process.env.AI_COORDINATOR = 'off';
         add('s6', { githubLink: 'x' });
         expect(await precheck.run('s6')).toBeNull();
         delete process.env.AI_COORDINATOR;
+    });
+});
+
+describe('the feedback promises nothing', () => {
+    const { withoutPromises } = precheck._internal;
+    it.each([
+        "I'll check it from my side.",
+        'I will go through your GitHub link and confirm.',
+        'We will review it and get back to you.',
+        "I'm checking the repository now.",
+        'You will hear from us soon.',
+        'Your work will be reviewed shortly.',
+        'Stay tuned!'
+    ])('drops "%s"', (said) => expect(withoutPromises('Good page. ' + said)).toBe('Good page.'));
+
+    it('keeps advice, file names and the ask to submit again', () => {
+        const t = 'The form in contact.html posts nowhere yet. Wire it to a backend, then submit it again. You will need a README too.';
+        expect(withoutPromises(t)).toBe(t);
+        expect(withoutPromises('')).toBe('');
     });
 });
 

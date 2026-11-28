@@ -1257,6 +1257,33 @@ router.post('/interview-ai', requireAdminAPI, async (req, res) => {
   }
 });
 
+// ─── COORDINATOR REVIEWS: WHICH AI ────────────────────────────────────────────
+// Gemini (free) or Claude (paid per review, capped a month) for the submission
+// pre-check and the feedback interns receive (services/aiCoordinator.js).
+router.get('/coordinator-ai', requireAdminAPI, async (req, res) => {
+  try {
+    res.json({ success: true, data: await require('../services/aiCoordinator').engineSummary() });
+  } catch (err) {
+    console.error('[admin] coordinator AI read failed:', err.message);
+    res.status(500).json({ success: false, message: 'Could not read the coordinator AI setting.' });
+  }
+});
+
+router.post('/coordinator-ai', requireAdminAPI, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const out = await require('../services/aiCoordinator').saveEngine({
+      engine: String(b.engine || ''), claudeModel: String(b.claudeModel || ''), claudeMonthlyCap: b.claudeMonthlyCap,
+      by: (req.session && req.session.adminUser && req.session.adminUser.username) || 'admin'
+    });
+    if (out.error) return res.status(400).json({ success: false, message: out.error });
+    res.json({ success: true, data: out });
+  } catch (err) {
+    console.error('[admin] coordinator AI save failed:', err.message);
+    res.status(500).json({ success: false, message: 'Could not save the coordinator AI setting.' });
+  }
+});
+
 // ─── AUDIT LOG ────────────────────────────────────────────────────────────────
 
 router.get('/audit-log', requireAdminAPI, async (req, res) => {

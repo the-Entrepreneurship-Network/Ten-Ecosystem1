@@ -3449,18 +3449,18 @@ async function loadPerformance(){
   }
 }
 
-/* What the portal's AI pre-check found, said as the AI's, not the coordinator's.
-   The coordinator still reviews; this only tells the student early what to fix. */
+/* What the automatic check found, while the submission waits for review: it
+   only tells the student early what to fix, and decides nothing. */
 function aiPrecheckLine(sub, reviewed){
   const c = sub && sub.aiCheck;
   if (!c || reviewed) return "";
   const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (ch) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
   const problems = Array.isArray(c.problems) ? c.problems : [];
   const text = problems.length
-    ? "found something to fix: " + esc(problems.join(" ")) + " Your coordinator sees this too, and decides."
-    : "the link opens and nothing is missing. Your coordinator will review it.";
+    ? "something to fix before it can be approved: " + esc(problems.join(" ")) + " If you can fix it now, please do."
+    : "the link opens and nothing is missing. It is waiting for review.";
   const tone = problems.length ? "#f59e0b" : "#a78bfa";
-  return `<div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:rgba(167,139,250,0.07);border-left:3px solid ${tone};font-size:12.5px;color:#c8d4e8;line-height:1.55;">🤖 <b>AI pre-check</b> (an AI, not your coordinator): ${text}</div>`;
+  return `<div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:rgba(167,139,250,0.07);border-left:3px solid ${tone};font-size:12.5px;color:#c8d4e8;line-height:1.55;"><b>Automatic check</b>: ${text}</div>`;
 }
 
 function renderSubmissions(submissions){
@@ -3494,9 +3494,9 @@ function renderSubmissions(submissions){
         <h4 style="font-size:13px;color:#94a3b8;font-weight:700;margin-bottom:6px;">Review &amp; Feedback</h4>
         ${sub.feedback && sub.feedback !== "No Feedback Yet"
           ? `<div style="padding:12px;background:rgba(16,185,129,0.06);border-left:3px solid #10b981;border-radius:6px;">
-               <div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:4px;">${sub.reviewedBy === 'ai' ? '🤖 AI COORDINATOR FEEDBACK' : '📝 COORDINATOR FEEDBACK'}</div>
+               <div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:4px;">📝 COORDINATOR FEEDBACK${sub.reviewedBy === 'ai' ? ' <span title="Reviewed with AI assistance for the coordinator team. Your coordinator can change this decision." style="font-weight:600;color:#94a3b8;border:1px solid #334155;border-radius:999px;padding:0 7px;margin-left:6px;letter-spacing:.3px;">AI-assisted</span>' : ''}</div>
                <div style="font-size:13px;color:#c8d4e8;line-height:1.6;">${sub.feedback}</div>
-               ${sub.reviewedBy === 'ai' ? `<div style="font-size:11px;color:#94a3b8;margin-top:6px;">${sub.status === 'Rejected' ? 'Fix what it asks and submit the task again: the AI checks it again straight away. ' : ''}Your coordinator can change this decision.</div>` : ''}
+               ${sub.reviewedBy === 'ai' && sub.status === 'Rejected' ? `<div style="font-size:11px;color:#94a3b8;margin-top:6px;">Make these changes and submit the task again: it is checked again as soon as you do. Questions? Message your coordinator in Messages.</div>` : ''}
              </div>`
           : `<div style="font-size:12px;color:#64748b;">⏳ Feedback pending...</div>`
         }

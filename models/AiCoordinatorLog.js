@@ -26,6 +26,9 @@ const aiCoordinatorLogSchema = new mongoose.Schema({
     // ask | ask-ai | handover | interview; reminder: inactive | week | weekly.
     source:     { type: String, default: "" },
     reason:     { type: String, default: "" },
+    // precheck: the AI that answered (gemini | claude; empty when none did).
+    // Claude's reviews are counted from it against the admin portal's monthly limit.
+    engine:     { type: String, default: "" },
     createdAt:  { type: Date, default: Date.now }
 });
 

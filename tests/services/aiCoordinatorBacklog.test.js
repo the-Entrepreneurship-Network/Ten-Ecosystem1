@@ -50,6 +50,7 @@ jest.mock('../../models/MailHistory', () => ({
 }));
 jest.mock('../../services/aiCoordinator', () => ({
     NAME: 'TEN AI Coordinator',
+    SENDER: 'TEN Coordinator Team',
     enabled: () => !/^off$/i.test(process.env.AI_COORDINATOR || ''),
     scrub: (s) => String(s).replace(/[^\s@]+@[^\s@]+/g, '[address]').replace(/\b[6-9]\d{9}\b/g, '[phone]'),
     HANDOVER_LABEL: { money: 'money', marks: 'marks or a review' }
@@ -61,7 +62,7 @@ jest.mock('../../services/submissionPrecheck', () => ({
         mockState.runs.push({ id: String(id), opts });
         const sub = mockState.submissions.find((s) => s._id === String(id));
         if (!sub || sub.reviewedOnce) return null;
-        const check = Object.assign({ at: new Date(), by: 'ai', match: 'yes', problems: [], draft: 'Good work.', link: { verdict: 'opens' }, repo: null },
+        const check = Object.assign({ at: new Date(), by: 'ai', engine: 'gemini', match: 'yes', problems: [], draft: 'Good work.', link: { verdict: 'opens' }, repo: null },
             mockState.checks[sub._id] || {});
         sub.aiCheck = check;
         mockState.logs.push({ kind: 'precheck', employeeId: sub.employeeId, question: sub.task, source: check.problems.length ? 'changes' : 'approve', reply: check.problems.join(' '), createdAt: new Date() });
@@ -100,7 +101,7 @@ const sub = (id, extra) => Object.assign({
     status: 'Pending', reviewedOnce: false, aiCheck: null, githubLink: 'https://site.example.in', image: '',
     submittedAt: ago(10)
 }, extra);
-const freshCheck = (extra) => Object.assign({ at: new Date(Date.now() - 3600 * 1000), by: 'ai', match: 'yes', problems: [], draft: 'Good work.', link: { verdict: 'opens' }, repo: null }, extra);
+const freshCheck = (extra) => Object.assign({ at: new Date(Date.now() - 3600 * 1000), by: 'ai', engine: 'gemini', match: 'yes', problems: [], draft: 'Good work.', link: { verdict: 'opens' }, repo: null }, extra);
 // Undoes quoted-printable soft breaks and header folding.
 const unfold = (mail) => mail.replace(/=\r?\n/g, '').replace(/\r?\n[ \t]+/g, ' ');
 
@@ -121,7 +122,7 @@ describe('the decision on a pre-checked submission', () => {
     const { decide } = jobs._internal;
     const check = (extra) => Object.assign({ by: 'ai', match: 'yes', problems: [], draft: 'Nice.', link: { verdict: 'opens' }, repo: null }, extra);
 
-    it('approves only when every check passed and Gemini read it', () => {
+    it('approves only when every check passed and the AI read it', () => {
         expect(decide(check())).toEqual({ status: 'Approved', feedback: 'Nice.' });
         expect(decide(check({ match: 'partly' }))).toEqual({ status: 'Approved', feedback: 'Nice.' });
         expect(decide(check({ match: 'unclear' }))).toEqual({ status: 'Approved', feedback: 'Nice.' });
@@ -134,11 +135,15 @@ describe('the decision on a pre-checked submission', () => {
             .toEqual({ status: 'Rejected', feedback: 'Fix: make it public.' });
         expect(decide(check({ match: 'no', draft: 'This is not the landing page task.' })))
             .toEqual({ status: 'Rejected', feedback: 'This is not the landing page task.' });
+        // Its feedback asks for changes, so the status does too: never "Approved" with "add this and submit it again".
+        expect(decide(check({ match: 'partly', decision: 'changes', draft: 'Add the contact form, then submit it again.' })))
+            .toEqual({ status: 'Rejected', feedback: 'Add the contact form, then submit it again.' });
+        expect(decide(check({ match: 'partly', decision: 'approve' }))).toEqual({ status: 'Approved', feedback: 'Nice.' });
     });
 
     it('waits for a person otherwise, and never decides without Gemini', () => {
         expect(decide(null)).toEqual({ wait: 'no pre-check yet' });
-        expect(decide(check({ by: 'rules' }))).toEqual({ wait: 'Gemini did not read it' });
+        expect(decide(check({ by: 'rules' }))).toEqual({ wait: 'the AI did not read it' });
         expect(decide(check({ link: { verdict: 'unknown' } }))).toEqual({ wait: 'the link could not be checked' });
         expect(decide(check({ link: { verdict: 'down' } }))).toEqual({ wait: 'the link could not be checked' });
         // A check that failed is never "approve", even with Gemini's blessing.
@@ -171,7 +176,8 @@ describe('the review of the waiting submissions', () => {
 
         // Every decision went through the coordinator's own review function, as the AI's.
         expect(review.mock.calls.map((c) => [String(c[0].id), c[0].status])).toEqual([['s1', 'Approved'], ['s2', 'Approved'], ['s3', 'Rejected'], ['s8', 'Approved']]);
-        expect(review.mock.calls.every((c) => c[0].from === 'TEN AI Coordinator' && c[0].reviewedBy === 'ai')).toBe(true);
+        // Signed as the coordinator team, never as a person.
+        expect(review.mock.calls.every((c) => c[0].from === 'TEN Coordinator Team' && c[0].reviewedBy === 'ai')).toBe(true);
         const s3 = mockState.submissions.find((s) => s._id === 's3');
         expect(s3).toMatchObject({ status: 'Rejected', reviewedOnce: true, reviewedBy: 'ai', feedback: 'Before it can be approved: make it public.' });
         for (const id of ['s4', 's5', 's6']) expect(mockState.submissions.find((s) => s._id === id)).toMatchObject({ status: 'Pending', reviewedOnce: false });
@@ -186,7 +192,7 @@ describe('the review of the waiting submissions', () => {
         expect(mail).toContain('Subject: [ai-coordinator] daily run: 3 approved, 1 asked for changes, 3 still waiting; 0 sent to HR for certificates');
         expect(mail).toContain('1. Reviewed submissions: 4 (3 approved, 1 asked for changes), after 5 pre-check(s).');
         expect(mail).toContain('"Week 1: Landing page" -> asked for changes: Before it can be approved: make it public.');
-        expect(mail).toContain('Still waiting for a coordinator: 3. Of these, 0 have no pre-check yet, 2 could not be checked automatically or Gemini did not read them (a person should look), and 1 are older than 60 days (left for a person).');
+        expect(mail).toContain('Still waiting for a coordinator: 3. Of these, 0 have no pre-check yet, 2 could not be checked automatically or the AI did not read them (a person should look), and 1 are older than 60 days (left for a person).');
         // A pause only after a check that went to the network.
         expect(wait).toHaveBeenCalledTimes(5);
     });
@@ -223,6 +229,13 @@ describe('the review of the waiting submissions', () => {
         expect(mockState.runs.map((r) => r.id)).toEqual(['s1']);
         expect(review).not.toHaveBeenCalled();
         expect(out).toMatchObject({ checked: 1, approved: 0, changes: 0, left: 2 });
+    });
+
+    it('a fresh check written before the feedback became the review itself is made again, never sent', async () => {
+        mockState.submissions = [sub('s1', { aiCheck: freshCheck({ engine: undefined, draft: "Thanks! I'll check it from my side and message you." }) })];
+        await jobs.reviewBacklog();
+        expect(mockState.runs.map((r) => r.id)).toEqual(['s1']);
+        expect(review.mock.calls.map((c) => c[0].feedback)).toEqual(['Good work.']);
     });
 
     it('a submission a person reviewed in the meantime is left as theirs', async () => {
@@ -274,7 +287,8 @@ describe('the certificate approvals', () => {
         expect(mockState.certs.map((c) => c.employeeId)).toEqual(['TEN/WEB/2001']);
         const { opts } = mockState.certs[0];
         expect(opts.approver).toBe('TEN AI Coordinator');
-        expect(opts.from).toBe('TEN AI Coordinator');
+        expect(opts.from).toBe('TEN Coordinator Team');
+        expect(opts.message).toMatch(/^You're approved for certificate consideration: attendance 82%/);
         expect(opts.remarks).toMatch(/^Approved by the AI Coordinator: attendance 82%, 6 tasks approved, internship ended \d{4}-\d{2}-\d{2}\.$/);
         expect(opts.message).toContain('HR gives the final approval');
         // Criteria are only computed for those who finished and were not returned.
@@ -339,7 +353,7 @@ describe('the report', () => {
         expect(text).toContain('1. Reviewed submissions: 2 (1 approved, 1 asked for changes), after 1 pre-check(s).');
         expect(text).toContain('"Week 1: Landing page" -> approved: Clean page. Add alt text next time.');
         expect(text).toContain('"Week 2: API" -> asked for changes: The GitHub repository is private');
-        expect(text).toContain('Still waiting for a coordinator: 3. Of these, 1 have no pre-check yet, 1 could not be checked automatically or Gemini did not read them (a person should look), and 1 are older than 60 days (left for a person).');
+        expect(text).toContain('Still waiting for a coordinator: 3. Of these, 1 have no pre-check yet, 1 could not be checked automatically or the AI did not read them (a person should look), and 1 are older than 60 days (left for a person).');
         expect(text).toContain('2. Approved for certificates and sent to HR: 1.');
         expect(text).toContain('TEN/WEB/1006: attendance 88%, 7 tasks approved, internship ended 2026-11-20');
         expect(text).toContain('3. Reminders: 3 (2 sign-in, 1 unfinished week, 0 weekly progress).');

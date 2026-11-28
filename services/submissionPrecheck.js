@@ -243,6 +243,18 @@ const SCHEMA = {
     },
     required: ['match', 'draft', 'decision']
 };
+/** The same answer in the JSON Schema form Claude's structured output takes. */
+const CLAUDE_SCHEMA = {
+    type: 'object',
+    properties: {
+        match: { type: 'string', enum: ['yes', 'partly', 'no', 'unclear'] },
+        reason: { type: 'string' },
+        draft: { type: 'string' },
+        decision: { type: 'string', enum: ['approve', 'changes'] }
+    },
+    required: ['match', 'reason', 'draft', 'decision'],
+    additionalProperties: false
+};
 
 function linkLine(link) {
     return ({
@@ -272,6 +284,32 @@ function draftWithoutAi(task, problems) {
     return problems.length
         ? `Thanks for submitting "${task}". Before it can be approved: ${problems.join(' ')} Please fix this and submit it again.`
         : `Thanks for submitting "${task}". The link opens and everything needed is attached.`;
+}
+
+/*
+ * The AI's text goes to the intern as the review itself, and nothing follows
+ * it. A model that writes as a coordinator promises the next step a person
+ * would take ("I'll go through your GitHub link and message you"); interns
+ * then waited for a message that never came. The prompt forbids it, and any
+ * sentence that still promises a later check or message is removed here.
+ */
+const LATER = new RegExp([
+    // I'll / we will / I am going to … check, review, get back, message …
+    "\\b(?:i|we)\\s*(?:'ll|’ll| will| shall|'m going to|’m going to| am going to|'re going to|’re going to| are going to)\\s+(?:\\w+\\s+){0,3}?" +
+        '(?:check|review|look|verify|test|go through|get back|message|reach out|contact|let you know|update|notify|inform|follow up|send|confirm|share)\\b',
+    // I'm checking / we are reviewing it now
+    "\\b(?:i|we)\\s*(?:'m|’m| am| are|'re|’re)\\s+(?:now\\s+)?(?:checking|reviewing|looking|going through|verifying)\\b",
+    '\\bfrom (?:my|our) (?:side|end)\\b',
+    '\\bget back to you\\b',
+    '\\b(?:stay tuned|keep you (?:posted|updated))\\b',
+    '\\b(?:will|shall) be (?:reviewed|checked|verified|looked at|evaluated|notified)\\b',
+    "\\byou(?:'ll|’ll| will) (?:hear|receive|get) (?:from|a message|an update|an email|feedback)\\b"
+].join('|'), 'i');
+
+/** The draft without its promises; '' when nothing else is left. A sentence ends at . ! or ? before a space, so index.html stays whole. */
+function withoutPromises(text) {
+    const sentences = String(text || '').replace(/\s+/g, ' ').trim().split(/(?<=[.!?]["')\]]*) /);
+    return sentences.filter((s) => s && !LATER.test(s)).join(' ');
 }
 
 /**
@@ -321,17 +359,17 @@ async function run(id, { screenshotExpected = true, notify = true, review = fals
             by: 'rules'
         };
 
-        if (gemini.ready()) {
+        const ai = require('./aiCoordinator');
+        if (ai.reviewerReady()) {
             try {
                 const DomainTask = require('../models/new/DomainTask');
                 const def = await DomainTask.findOne({ taskTitle: sub.task }).select('taskDescription').lean().catch(() => null);
                 const prompt = [
-                    `You help a coordinator of TEN's ${sub.domain || ''} virtual internship review an intern's task submission. ` +
-                    'You do not decide: the coordinator does.',
+                    `You review an intern's task submission for the coordinator team of TEN's ${sub.domain || ''} virtual internship.`,
                     `Task: "${task}"`,
                     def && def.taskDescription ? `Task description: ${String(def.taskDescription).slice(0, 1200)}` : '',
                     `The intern's note: "${scrub(String(sub.note || '')).slice(0, 600)}"`,
-                    'What the portal checked:',
+                    'What was checked:',
                     `- The link ${linkLine(link)}.`,
                     repo ? (repo.unknown ? `- GitHub: ${repo.unknown}, so the repository was not checked.`
                         : `- GitHub repository ${repo.fullName || ''}: ${repo.public ? 'public' : 'private or missing'}` +
@@ -343,28 +381,42 @@ async function run(id, { screenshotExpected = true, notify = true, review = fals
                     '',
                     'Say whether the work matches the task: "yes", "partly", "no", or "unclear" when there is too little to tell. ' +
                     'Give the reason in one short sentence.',
-                    'Write a draft of the feedback the coordinator could send the intern: 2 to 4 sentences, under 80 words, ' +
-                    'specific to this task, kind and direct. If a check failed, say exactly what to fix.',
-                    'Suggest "approve" when the checks pass and the work matches the task; otherwise "changes".',
+                    'Then write "draft": the feedback the intern receives with the decision. It is sent as it is, and no other message follows it, so:',
+                    '- write to the intern as "you", the way a good coordinator who opened the work would: warm, plain and specific;',
+                    '- name one or two real things from the work (a file, the README, what the page shows), so it is clear it was read;',
+                    '- if something must change, say exactly what and how, and ask them to submit it again; ' +
+                    'if it is good, say what works and give one concrete tip for the next task;',
+                    '- never promise a later step ("I will check", "I\'ll review it", "I\'ll get back to you", "from my side", "you will hear from us"): ' +
+                    'this is the review, and nothing comes after it;',
+                    '- no greeting by name and no sign-off; do not mention checks, tools or AI, and never claim to be a person or give a name;',
+                    '- 2 to 4 sentences, under 90 words.',
+                    '"decision": "approve" when the checks pass and the work is for this task, even if it could be better ' +
+                    '(the draft then says what works and gives tips, without asking for a resubmission); "changes" when the work ' +
+                    'is not for this task or a main part of what the task asks for is missing (the draft then says what to add). ' +
+                    'The intern\'s status follows this decision, so the draft must agree with it.',
                     'Answer with JSON: "match", "reason", "draft", "decision".'
                 ].filter(Boolean).join('\n');
-                const out = await gemini.ask(prompt, SCHEMA);
+                const asked = await ai.askReviewer(prompt, SCHEMA, CLAUDE_SCHEMA);
+                const out = asked && asked.out;
+                // Which AI answered: a Claude review counts towards the month's limit.
+                if (asked) check.engine = asked.engine;
                 const m = String((out && out.match) || '').toLowerCase();
-                const draft = String((out && out.draft) || '').trim();
-                if (draft) {
+                const wouldApprove = /approve/i.test(String((out && out.decision) || ''));
+                const draft = withoutPromises(out && out.draft);
+                // "Not this task" with praise for it is no answer: it waits for a person.
+                if (draft && !(m === 'no' && wouldApprove)) {
                     check.match = ['yes', 'partly', 'no'].includes(m) ? m : 'unclear';
                     check.reason = String((out && out.reason) || '').trim().slice(0, 300);
-                    check.draft = draft.slice(0, 1200);
+                    check.draft = draft.replace(/[<>]/g, '').slice(0, 1200);
                     // A failed check is never "approve", whatever the model says,
                     // and a model that would approve it wrote praise: the checks'
                     // own draft, which says what to fix, goes in the box instead.
-                    const wouldApprove = /approve/i.test(String(out.decision || ''));
                     check.decision = !problems.length && wouldApprove ? 'approve' : 'changes';
                     if (problems.length && wouldApprove) check.draft = draftWithoutAi(task, problems);
                     check.by = 'ai';
                 }
             } catch (err) {
-                console.warn('[pre-check] Gemini did not answer:', err.message);
+                console.warn('[pre-check] the AI did not answer:', err.message);
             }
         }
         // Nor can it say work matches the task when nobody could open the work.
@@ -395,23 +447,24 @@ function logCheck(sub, task, check) {
     try {
         require('../models/AiCoordinatorLog').create({
             kind: 'precheck', employeeId: sub.employeeId || '', domain: sub.domain || '',
-            question: task, reply: check.problems.join(' ').slice(0, 1000), source: check.decision, reason: check.by
+            question: task, reply: check.problems.join(' ').slice(0, 1000), source: check.decision, reason: check.by,
+            engine: check.engine || ''
         }).catch((err) => console.error('[pre-check] log failed:', err.message));
     } catch (err) {
         console.error('[pre-check] log failed:', err.message);
     }
 }
 
-/** A problem the student can fix now: in the portal and on their phone, not by email. */
+/** A problem the student can fix now: in the portal and on their phone, not by email. It promises nothing. */
 async function tellStudent(sub, task, problems) {
     try {
         const Notification = require('../models/Notification');
         const note = new Notification({
-            title: `Check your submission: ${task}`.slice(0, 140),
-            message: `The portal's AI pre-check found: ${problems.join(' ')} Your coordinator sees this too. ` +
-                'If you can fix it now, for example by making the repository public, do: they open the link when they review.',
+            title: `Please check your submission: ${task}`.slice(0, 140),
+            message: `${problems.join(' ')} If you can fix it now, for example by making the repository public, please do: ` +
+                'the link is opened again when it is reviewed.',
             type: 'warning',
-            from: 'TEN AI Coordinator',
+            from: require('./aiCoordinator').SENDER,
             targetType: 'student',
             targetEmployeeId: sub.employeeId,
             targetDomain: sub.domain || ''
@@ -425,5 +478,5 @@ async function tellStudent(sub, task, problems) {
 
 module.exports = {
     run, checkLink, parseGitHub, githubRepo, firstUrl, isPublicAddress,
-    _internal: { requestOnce, guardedLookup, problemsOf, draftWithoutAi, normalizeUrl }
+    _internal: { requestOnce, guardedLookup, problemsOf, draftWithoutAi, normalizeUrl, withoutPromises }
 };
