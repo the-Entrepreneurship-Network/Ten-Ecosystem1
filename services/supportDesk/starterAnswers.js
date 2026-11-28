@@ -32,11 +32,17 @@ module.exports = [
             'i filled the google form but did not get employee id', 'request for employee id', 'could you please share my employee id to complete my onboarding', 'i joined as an intern please share my employee id',
             'i am shortlisted please provide my employee id', 'got shortlisted mail need my employee id',
             'i joined the group and filled the google form when will i get my employee id', 'when will i get my employee id',
-            'employee id is not in the shared documents', 'employee id not mentioned in my documents', 'i have recently joined please provide my employee id', 'need employee id to get my offer letter and documents'
+            'employee id is not in the shared documents', 'employee id not mentioned in my documents', 'i have recently joined please provide my employee id', 'need employee id to get my offer letter and documents', 'i was selected on unstop but did not get employee id', 'selected for internship on unstop where is my employee id', 'applied on unstop got selected no employee id or offer letter', 'shortlisted on unstop what to do next', 'selected through internshala but no employee id', 'i do not know what my employee id is', 'i didn\'t get my employee i\'d', 'did not get employee i\'d', 'my employee i\'d not received',
+            'i didn\'t get employe id', 'didnt get employe id', 'employe id not received', 'i dont have my employe id', 'no employe id yet', 'i didnt get any employee id so far', 'have not received any employee id so far',
+            'my name is not in the employee id spreadsheet', 'filled the employee id generation form but no id', 'name not appearing in employee id sheet',
+            'employee id form response recorded but no id', 'please verify my employee id form submission',
+            'following up on my onboarding i have not received my employee id', 'update on when i will get my employee id', 'still waiting for my employee id after onboarding'
         ],
         answer: 'You get your Employee ID the moment you register. It looks like TEN/WEB/1005, and you will find it in ' +
             'your welcome email and at the top of your dashboard.\n\n' +
             'Not registered yet? Register here: {{registerUrl}}\n\n' +
+            'Selected on Unstop, Internshala or another job site? That does not register you here, so you still need to ' +
+            'register at the link above with the same email address to get your Employee ID.\n\n' +
             "Already registered but can't find it? Sign in with your email address at {{loginUrl}}, and it is at the top of your dashboard.",
         personal: 'Your Employee ID is {{employeeId}}. You can also see it at the top of your dashboard after signing in at {{loginUrl}}.'
     },
@@ -143,7 +149,8 @@ module.exports = [
         question: 'What are the plans and fees?',
         examples: [
             'what is the fee', 'is the internship free', 'how much does the internship cost', 'fees for 1 month internship',
-            'which plans are free', 'kitna fee hai', 'is there any registration fee', 'price of the internship plans', 'fast track fee'
+            'which plans are free', 'kitna fee hai', 'is there any registration fee', 'price of the internship plans', 'fast track fee',
+            'are there any registration or training charges', 'is there any hidden charge for this internship', 'do i have to pay anything to join'
         ],
         answer: 'The 45 Days, 3 Months and 6 Months plans are free.\n\n' +
             'The fast-track plans have a one-time fee: 1 Week ₹2000, 15 Days ₹1500 and 1 Month ₹1000. They come with ' +
@@ -253,7 +260,8 @@ module.exports = [
         examples: [
             'how to upload documents', 'which documents are required', 'document upload failed', 'invalid file format',
             'aadhaar upload', 'marksheet upload', 'my documents are under review', 'my documents were rejected',
-            'document kaise upload kare'
+            'document kaise upload kare', 'why are address proof and marksheet required',
+            'should i submit documents through the portal or by email', 'where should i submit my address proof and marksheet'
         ],
         answer: 'Open My Documents on your dashboard and go to the Upload Documents tab. Upload two files:\n' +
             '1. Address proof: Aadhaar, passport, voter ID or any government ID.\n' +
@@ -375,7 +383,11 @@ module.exports = [
         question: 'How do I join the WhatsApp group?',
         examples: [
             'whatsapp group link', 'how to join the whatsapp group', 'domain group link', 'whatsapp group kaise join kare',
-            'i was removed from the whatsapp group', 'community group link'
+            'i was removed from the whatsapp group', 'community group link',
+            'how can i join my domain whatsapp group', 'how to join the software engineer whatsapp group',
+            'i registered how do i join the interns group', 'whatsapp group to connect with other interns',
+            'not able to join my domain group in the whatsapp community', 'cannot find the aiml group in whatsapp community',
+            'i am not able to join the tech group', 'how to join the web development group'
         ],
         answer: 'The group links are on your dashboard: open Guidelines, then Communication & Support. You will find the ' +
             "Support Group, the Employee ID Group and your domain's group there. After the joining steps, the " +
@@ -406,6 +418,19 @@ module.exports = [
         answer: "That happens when a WhatsApp group's admin resets its invite link: the old link stops working for " +
             'everyone. It is a WhatsApp setting, not a problem with your account or with the portal.\n\n' +
             'Please ask your coordinator or the group admin for the new link, and join with that.'
+    },
+    {
+        key: 'whatsapp-community-full',
+        question: 'The WhatsApp group or community link says it is full',
+        examples: [
+            'the community is full', 'whatsapp says the group is full', 'cannot join the domain group it is full',
+            'the link says community is full', 'group is full unable to join', 'whatsapp group full ho gaya',
+            'domain group has reached its limit', 'the community has reached its member limit'
+        ],
+        answer: 'WhatsApp limits how many people a group or community can hold, and that one has reached the limit. ' +
+            'It is a WhatsApp limit, not a problem with your account or with the portal.\n\n' +
+            'Please ask your coordinator for the link to the new group for your domain, and join with that. ' +
+            'Until then you can reach your coordinator from the "My Coordinator" card on your dashboard.'
     },
     {
         key: 'course-videos',
