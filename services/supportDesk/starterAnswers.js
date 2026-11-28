@@ -36,7 +36,7 @@ module.exports = [
             'i didn\'t get employe id', 'didnt get employe id', 'employe id not received', 'i dont have my employe id', 'no employe id yet', 'i didnt get any employee id so far', 'have not received any employee id so far',
             'my name is not in the employee id spreadsheet', 'filled the employee id generation form but no id', 'name not appearing in employee id sheet',
             'employee id form response recorded but no id', 'please verify my employee id form submission',
-            'following up on my onboarding i have not received my employee id', 'update on when i will get my employee id', 'still waiting for my employee id after onboarding',
+            'i am new here please provide my employee id', 'got your email from the group please give me employee id', 'there was a list of employee ids but my name was not there', 'my name is not on the employee id list', 'following up on my onboarding i have not received my employee id', 'update on when i will get my employee id', 'still waiting for my employee id after onboarding',
             'i am a student of internship i don\'t get employe i\'d', 'i don\'t get employe i\'d please provide', 'please provide employe i\'d as soon as possible', 'intern student no employe i\'d'
         ],
         answer: 'You get your Employee ID the moment you register. It looks like TEN/WEB/1005, and you will find it in ' +
