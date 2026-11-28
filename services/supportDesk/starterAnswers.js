@@ -378,7 +378,8 @@ module.exports = [
             'whatsapp group link', 'how to join the whatsapp group', 'domain group link', 'whatsapp group kaise join kare',
             'i was removed from the whatsapp group', 'community group link',
             'how can i join my domain whatsapp group', 'how to join the software engineer whatsapp group',
-            'i registered how do i join the interns group', 'whatsapp group to connect with other interns'
+            'i registered how do i join the interns group', 'whatsapp group to connect with other interns',
+            'not able to join my domain group in the whatsapp community', 'cannot find the aiml group in whatsapp community'
         ],
         answer: 'The group links are on your dashboard: open Guidelines, then Communication & Support. You will find the ' +
             "Support Group, the Employee ID Group and your domain's group there. After the joining steps, the " +
