@@ -144,7 +144,8 @@ module.exports = [
         question: 'What are the plans and fees?',
         examples: [
             'what is the fee', 'is the internship free', 'how much does the internship cost', 'fees for 1 month internship',
-            'which plans are free', 'kitna fee hai', 'is there any registration fee', 'price of the internship plans', 'fast track fee'
+            'which plans are free', 'kitna fee hai', 'is there any registration fee', 'price of the internship plans', 'fast track fee',
+            'are there any registration or training charges', 'is there any hidden charge for this internship', 'do i have to pay anything to join'
         ],
         answer: 'The 45 Days, 3 Months and 6 Months plans are free.\n\n' +
             'The fast-track plans have a one-time fee: 1 Week ₹2000, 15 Days ₹1500 and 1 Month ₹1000. They come with ' +
@@ -254,7 +255,8 @@ module.exports = [
         examples: [
             'how to upload documents', 'which documents are required', 'document upload failed', 'invalid file format',
             'aadhaar upload', 'marksheet upload', 'my documents are under review', 'my documents were rejected',
-            'document kaise upload kare'
+            'document kaise upload kare', 'why are address proof and marksheet required',
+            'should i submit documents through the portal or by email', 'where should i submit my address proof and marksheet'
         ],
         answer: 'Open My Documents on your dashboard and go to the Upload Documents tab. Upload two files:\n' +
             '1. Address proof: Aadhaar, passport, voter ID or any government ID.\n' +
