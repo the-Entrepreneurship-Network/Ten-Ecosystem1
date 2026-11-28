@@ -11,15 +11,17 @@
 const express = require('express');
 const router  = express.Router();
 const push    = require('../services/pushService');
+const chatIdentity = require('../services/chatIdentity');
 
-/** Who is calling, from the session alone. Mirrors routes/chatModeration.js. */
+/**
+ * Who is calling, from the session alone: the identity chat and the
+ * notification feed use (services/chatIdentity.js). Its own copy here had no
+ * founder, mentor, investor or contractor, so they could not turn on phone
+ * notifications at all. The ids are the ones chat sends its pushes to.
+ */
 function identityOf(req) {
-  const s = req.session || {};
-  if (s.adminUser)   return { role: 'admin',       id: s.adminUser.username || 'admin' };
-  if (s.hr)          return { role: 'hr',          id: s.hr.email || s.hr.username };
-  if (s.coordinator) return { role: 'coordinator', id: s.coordinator.email || s.coordinator.username };
-  if (s.student)     return { role: 'student',     id: s.student.employeeId };
-  return null;
+  const me = chatIdentity.identityFromSession(req.session);
+  return me ? { role: me.role, id: me.id } : null;
 }
 
 function requireUser(req, res, next) {

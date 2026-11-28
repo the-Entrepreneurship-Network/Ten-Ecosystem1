@@ -443,11 +443,20 @@ loads.
     own tag and gets its own line, instead of replacing the last.
   - Inside the installed app, the orb offers **Turn on notifications** once
     per device, from a button, below `js/db-banner.js`'s warning bar. The
-    Notifications page keeps its own switch. Who can subscribe:
-    students, coordinators, HR and admin (`routes/push.js`). Founders, mentors,
-    investors and contractors cannot yet.
-  - A second system, `EcosystemNotification`, is written by several features
-    but **never shown** anywhere (§17).
+    Notifications page keeps its own switch. Anyone signed in can subscribe:
+    `routes/push.js` takes the caller from `services/chatIdentity.js`, the same
+    identity chat and the feed use, so a device is stored under the id pushes
+    are sent to (a founder's, mentor's, investor's or contractor's email).
+  - **Founders, mentors, investors and contractors** are told things in a
+    second table, `EcosystemNotification` (an investor's interest, a session
+    request, a profile approved), keyed on their `EcosystemUser` id. The feed,
+    the orb's count and mark-all-read include their own rows, and a click
+    goes to the row's `link` (pages on this site only). A new row is also
+    pushed to their phone (`notificationPush.mirrorEcosystem`, from the
+    model's save hook; marking one read does not push again). Rows added with
+    `insertMany` run no hooks and are not pushed.
+  - HR's alerts in that table (`services/hrAlert.js`, new student feedback)
+    are still not shown to HR (§17).
 - **Chat.** Domain rooms, staff rooms and DMs, with reply-to-a-message (#260),
   personal blocks, reports, admin moderation, and images under
   `uploads/chat/`. A student can also DM the AI Coordinator (§7.14), whose
@@ -1886,7 +1895,7 @@ whoever takes over. Until then:
 | The `/student-portal/` page still shows six testimonials that were removed from its source on 2 September | The bundle was never rebuilt | rebuild `student-portal-app` and commit (§15.5) |
 | Admin console: certificate Approve/Reject buttons return 404 | `routes/adminPortal.js` lists pending requests but has no approve or reject route, and `CertificateRequest` has no rejected status to record a rejection in | `ten-admin.html`; HR's approve route is `routes/v2/hr.js`. Reject needs a product decision first |
 | The mentor dashboard's home tab lists two startups that do not exist (AgroVedic Systems, PayBlock Finance), its Assigned Students tab shows a template card ("Intern name"), and every mentor's rating (4.9/5) and logged hours (32 hrs) are the same fixed numbers | All fixed placeholder markup; nothing loads real assignments and there is no route for them. The Mentoring Calendar tab is real | `public/mentor-dashboard.html` (`#startupList`). Needs a decision: an honest empty state, or real assignments |
-| `EcosystemNotification` rows are written but never shown | HR never sees new-feedback alerts; founders, investors and contractors miss theirs (HR's approve/reject decision is now emailed) | §7.1 |
+| HR's `EcosystemNotification` alerts are written but never shown (founders, mentors, investors and contractors now see theirs) | HR never sees these alerts in the portal: new student feedback (`routes/studentFeedback.js`) and the alerts `services/hrAlert.js` raises, which it also emails | §7.1 |
 | Paying an attendance or LOR fine does not release the certificate | The fine types the cron writes differ from the one the admin's approval clears | `routes/v2/certificates.js` vs `routes/adminPortal.js` |
 | Studio UTR claims have no approve button | The admin's pending queue lists only `mode: 'manual'`; Studio rows are `mode: 'upi'` | `routes/adminPortal.js`, `ten-admin.html` |
 | Missing SMTP credentials make mail "succeed" without sending | Silent loss of every mail | `utils/mailer.js` |

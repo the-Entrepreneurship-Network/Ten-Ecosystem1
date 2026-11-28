@@ -15,9 +15,11 @@
  */
 
 const express = require('express');
+const mongoose = require('mongoose');
 const router  = express.Router();
 
 const Notification = require('../models/Notification');
+const EcosystemNotification = require('../models/EcosystemNotification');
 const Message      = require('../models/Message');
 const ChatRead     = require('../models/ChatRead');
 const Student      = require('../models/Student');
@@ -31,6 +33,20 @@ const chatIdentity = require('../services/chatIdentity');
 function identityOf(req) {
   return chatIdentity.identityFromSession(req.session);
 }
+
+/*
+ * Founders, mentors, investors and contractors are told things in their own
+ * table: an investor's interest, a session request, a project assigned. Those
+ * rows were written and never read: no page showed them and the count left
+ * them out. Their EcosystemUser id is in the session from /login.
+ */
+const ECOSYSTEM_ROLES = new Set(['founder', 'mentor', 'investor', 'contractor']);
+function ecosystemUserId(req) {
+  const id = req.session && req.session.ecosystemUserId;
+  return ECOSYSTEM_ROLES.has(req.me.role) && mongoose.isValidObjectId(id) ? id : null;
+}
+/** A page on this site, or nothing: the list and the orb follow these links. */
+const onSite = (u) => (typeof u === 'string' && /^\/(?![\/\\])/.test(u) ? u : null);
 
 function requireUser(req, res, next) {
   const me = identityOf(req);
@@ -89,6 +105,26 @@ router.get('/feed', requireUser, async (req, res) => {
         read: Array.isArray(n.readBy) && n.readBy.indexOf(me.id) !== -1,
         url: null
       });
+    }
+
+    // ── their own: founders, mentors, investors, contractors ────────────
+    const ecoId = ecosystemUserId(req);
+    if (ecoId) {
+      const own = await EcosystemNotification.find({ userId: ecoId })
+        .sort({ createdAt: -1 }).limit(100).lean();
+      for (const n of own) {
+        items.push({
+          id: 'eco:' + String(n._id),
+          kind: 'portal',
+          type: 'info',
+          title: n.title || 'Notification',
+          body: n.message || '',
+          from: '',
+          at: n.createdAt,
+          read: !!n.isRead,
+          url: onSite(n.link)
+        });
+      }
     }
 
     // ── unread direct messages, one row per conversation ────────────────
@@ -162,6 +198,10 @@ router.post('/read-all', requireUser, async (req, res) => {
       { readBy: { $ne: me.id } },
       { $addToSet: { readBy: me.id } }
     );
+    const ecoId = ecosystemUserId(req);
+    if (ecoId) {
+      await EcosystemNotification.updateMany({ userId: ecoId, isRead: false }, { $set: { isRead: true, readAt: new Date() } });
+    }
 
     const rooms = await Message.distinct('chatRoom', chatIdentity.dmRoomFilterFor(me));
     const now = new Date();
@@ -198,7 +238,7 @@ router.get('/unread-count', requireUser, async (req, res) => {
 
     // Newest unread portal notification, so the orb can rank it against the
     // newest message and send the reader to whichever actually came last.
-    const newestNote = await Notification.findOne({
+    let newestNote = await Notification.findOne({
       $and: [
         { readBy: { $ne: me.id } },
         { $or: me.role === 'student'
@@ -206,6 +246,19 @@ router.get('/unread-count', requireUser, async (req, res) => {
           : [{ targetType: 'all' }] }
       ]
     }).sort({ createdAt: -1 }).select('title createdAt').lean();
+
+    // A founder's, mentor's, investor's or contractor's own, which link to
+    // the place on their dashboard they are about.
+    const ecoId = ecosystemUserId(req);
+    let own = 0;
+    if (ecoId) {
+      own = await EcosystemNotification.countDocuments({ userId: ecoId, isRead: false });
+      const newestOwn = own ? await EcosystemNotification.findOne({ userId: ecoId, isRead: false })
+        .sort({ createdAt: -1 }).select('title link createdAt').lean() : null;
+      if (newestOwn && (!newestNote || new Date(newestOwn.createdAt) > new Date(newestNote.createdAt))) {
+        newestNote = { title: newestOwn.title, createdAt: newestOwn.createdAt, url: onSite(newestOwn.link) };
+      }
+    }
 
     // Every id this person is known by — see services/chatIdentity. Matching
     // the canonical id alone hid conversations started under their other
@@ -241,14 +294,14 @@ router.get('/unread-count', requireUser, async (req, res) => {
         title: newestMessage.senderName || newestMessage.senderId || 'New message'
       };
     } else if (noteAt) {
-      latest = { kind: 'portal', url: '/notifications', title: newestNote.title || 'Notification' };
+      latest = { kind: 'portal', url: newestNote.url || '/notifications', title: newestNote.title || 'Notification' };
     }
 
     res.json({
       success: true,
       me: { id: me.id, role: me.role },
-      unread: notes + dms,
-      notifications: notes,
+      unread: notes + own + dms,
+      notifications: notes + own,
       messages: dms,
       latest
     });

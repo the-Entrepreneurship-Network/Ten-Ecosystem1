@@ -38,4 +38,22 @@ const ecosystemNotificationSchema = new mongoose.Schema({
 
 ecosystemNotificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
 
+/*
+ * To the phone as well, for a founder, mentor, investor or contractor who
+ * installed the portal and allowed notifications (services/notificationPush.js).
+ * Only a new one: marking it read saves it again. insertMany (HR's alerts) runs
+ * no save hooks, so those are not pushed.
+ */
+ecosystemNotificationSchema.pre('save', function (next) {
+  this.$locals.wasNew = this.isNew;
+  next();
+});
+ecosystemNotificationSchema.post('save', function (doc) {
+  try {
+    require('../services/notificationPush').mirrorEcosystem(doc).catch(() => {});
+  } catch (err) {
+    console.error('[ecosystem-notification] push mirror failed to start:', err.message);
+  }
+});
+
 module.exports = mongoose.model('EcosystemNotification', ecosystemNotificationSchema);
