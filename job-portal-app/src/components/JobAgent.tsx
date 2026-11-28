@@ -159,6 +159,13 @@ function upsertTrack(rows: TrackRow[], row: Omit<TrackRow, 'date'>): TrackRow[] 
 
 type Profile = { name: string | null; role: string; seniority: string; location: string; skills: string[]; college?: string };
 type Fit = { percent: number; band: string; advice: string; confidence: number; reasons: string[] };
+/* The AI's read of one opening (POST /match): checked on the server. */
+type AiMatch = { score: number; reasons: string[]; missing: string[] };
+/* POST /reword: only lines that passed the check against the resume. */
+type Reword = {
+  note: string; bullets: { before: string; after: string }[]; kept: { before: string; why: string }[];
+  letter: { text: string; words: number } | null; dropped: number; questions: string[];
+};
 type Job = {
   source: string; title: string; company: string; location: string; type: string;
   tags: string[]; url: string; posted: string | null; matched: string[]; score: number;
@@ -188,6 +195,8 @@ type Materials = {
   /* Prefilled when the posting published an address — the send step should
      not ask for something the advert already gave. */
   toEmail?: string;
+  /* The posting itself, for "Reword with AI". */
+  posting?: { title: string; company: string; description: string; tags: string[] };
 };
 
 export default function JobAgent() {
@@ -210,6 +219,10 @@ export default function JobAgent() {
   const [cacheNote, setCacheNote] = useState<string | null>(null);
   const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
   const [tracker, setTracker] = useState<TrackRow[]>(loadTracker);
+  const [ai, setAi] = useState<Record<string, AiMatch>>({});
+  const [aiNote, setAiNote] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const matchRun = useRef(0);
 
   const track = (job: Job, status: TrackStatus) => {
     const next = upsertTrack(tracker, {
@@ -262,12 +275,39 @@ export default function JobAgent() {
       const res = await fetch(`${API}/materials`, { method: 'POST', body });
       const data = await res.json();
       if (!data.ok) throw new Said(data.error || 'Could not write the documents.');
-      setMaterials({ ...data, toEmail });
+      setMaterials({ ...data, toEmail, posting: { title: job.title, company: job.company || '', description: job.description || '', tags: job.tags || [] } });
       track(job, 'tailored'); /* fit-and-track.md: tailoring is a tracked event */
     } catch (e) {
       setError(e instanceof Said ? e.message : 'Could not write the documents. Paste your resume text and try again.');
     } finally {
       setMaking('');
+    }
+  }
+
+  /*
+   * The AI's match for the top twenty, asked for after the list is on screen:
+   * the hunt stays instant, and when the AI cannot answer the cards simply
+   * keep the agent's own fit. A newer hunt makes an older answer stale.
+   */
+  async function scoreTop(list: Job[], resume: string) {
+    const run = ++matchRun.current;
+    setAi({}); setAiNote('');
+    const top = list.slice(0, 20);
+    if (!top.length || !resume.trim()) return;
+    setAiBusy(true);
+    try {
+      const res = await fetch(`${API}/match`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resumeText: resume.slice(0, 8000),
+          jobs: top.map((j) => ({ key: j.url, title: j.title, company: j.company, tags: j.tags, description: (j.description || '').slice(0, 1500) })),
+        }),
+      });
+      const data = await res.json();
+      if (run !== matchRun.current) return;
+      if (data.ok) { setAi(data.scores || {}); setAiNote(data.note || ''); }
+    } catch { /* the cards keep the agent's own fit */ } finally {
+      if (run === matchRun.current) setAiBusy(false);
     }
   }
 
@@ -288,6 +328,7 @@ export default function JobAgent() {
       setResumeText(data.resumeText || text || '');
       setProfile(data.profile);
       setJobs(data.jobs);
+      scoreTop(data.jobs, data.resumeText || text || '');
       setSearches(data.searches);
       setSources(data.sources);
     } catch (e) {
@@ -408,6 +449,12 @@ export default function JobAgent() {
                     Links open the employer's own posting — their careers page or their ATS. Openings found
                     through Adzuna or Jooble open through them, straight to the advert, and say so.
                   </p>
+                  {(aiBusy || aiNote || Object.keys(ai).length > 0) && (
+                    <p className="-mt-2 mb-4 text-[12px] leading-relaxed text-violet-200/80">
+                      {aiBusy ? 'Scoring your top 20 with AI…'
+                        : aiNote || 'AI match on your top 20. "Missing" lists only skills the posting names and your resume does not show.'}
+                    </p>
+                  )}
 
                   {/* Filters: what a job site has, read from what each posting says. */}
                   <div className="mb-4 flex flex-wrap items-center gap-2 text-[12px]">
@@ -527,15 +574,26 @@ export default function JobAgent() {
                               <span className="font-normal text-white/45">{' '}· via {j.source}</span>
                             )}
                           </p>
-                          {j.fit && <div className="shrink-0"><FitBadge fit={j.fit} /></div>}
+                          {ai[j.url] ? <div className="shrink-0"><AiBadge m={ai[j.url]} fit={j.fit} /></div>
+                            : j.fit && <div className="shrink-0"><FitBadge fit={j.fit} /></div>}
                         </div>
                         <p className="mt-1 text-[12.5px] text-white/55">
                           {[j.company, j.location, j.type].filter(Boolean).join(' · ')}
                         </p>
                         <p className="mt-1 break-all text-[11px] text-white/30">{j.directUrl || j.url}</p>
 
-                        {/* Why it scored what it scored, in the agent's own arithmetic. */}
-                        {j.fit?.reasons?.length > 0 && (
+                        {/* Why it scored what it scored: the AI's reasons when it
+                            answered, otherwise the agent's own arithmetic. */}
+                        {ai[j.url] ? (
+                          <>
+                            {ai[j.url].reasons.map((r) => (
+                              <p key={r} className="mt-2 text-[11.5px] leading-relaxed text-white/60">{r}</p>
+                            ))}
+                            {ai[j.url].missing.length > 0 && (
+                              <p className="mt-1 text-[11.5px] text-amber-200/85">missing: {ai[j.url].missing.join(', ')}</p>
+                            )}
+                          </>
+                        ) : j.fit && j.fit.reasons.length > 0 && (
                           <p className="mt-2 text-[11.5px] leading-relaxed text-white/50">{j.fit.reasons[0]}</p>
                         )}
                         {j.matched?.length > 0 && (
@@ -761,6 +819,7 @@ export default function JobAgent() {
       {materials && (
         <MaterialsPanel
           data={materials}
+          resume={resumeText}
           onClose={() => setMaterials(null)}
           onEmailed={() => {
             const j = jobs.find((x) => x.url === materials.job.url);
@@ -773,6 +832,18 @@ export default function JobAgent() {
 }
 
 /** The fitness verdict, coloured by band and honest about thin evidence. */
+function AiBadge({ m, fit }: { m: AiMatch; fit?: Fit }) {
+  const tone = m.score >= 85 ? 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30'
+    : m.score >= 60 ? 'bg-sky-400/15 text-sky-300 border-sky-400/30'
+      : 'bg-amber-400/12 text-amber-300/90 border-amber-400/25';
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${tone}`}
+      title={`The AI's read of your resume against this posting.${fit && fit.band !== 'unknown' ? ` The agent's own fit: ${fit.percent}%.` : ''}`}>
+      AI match {m.score}
+    </span>
+  );
+}
+
 function FitBadge({ fit }: { fit: Fit }) {
   const tone =
     fit.band === 'strong' ? 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30'
@@ -794,8 +865,34 @@ function FitBadge({ fit }: { fit: Fit }) {
  * is shown as prominently as the resume itself: it is the part that decides
  * whether the application is worth sending.
  */
-function MaterialsPanel({ data, onClose, onEmailed }: { data: Materials; onClose: () => void; onEmailed?: () => void }) {
+function MaterialsPanel({ data, resume, onClose, onEmailed }: { data: Materials; resume: string; onClose: () => void; onEmailed?: () => void }) {
   const copy = (text: string) => navigator.clipboard?.writeText(text);
+
+  /* The documents as shown: the agent's own, until the AI's checked lines replace them. */
+  const [resumeDoc, setResumeDoc] = useState(data.resume.text);
+  const [letterDoc, setLetterDoc] = useState({ text: data.coverLetter.text, words: data.coverLetter.words });
+  const [reword, setReword] = useState<Reword | null>(null);
+  const [rewording, setRewording] = useState(false);
+
+  async function rewordWithAi() {
+    setRewording(true);
+    try {
+      const res = await fetch(`${API}/reword`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeText: resume.slice(0, 8000), job: data.posting || data.job }),
+      });
+      const out = await res.json();
+      if (!out.ok) throw new Error(out.error);
+      const bullets: Reword['bullets'] = out.bullets || [];
+      setResumeDoc((doc) => bullets.reduce((d, b) => d.split(`• ${b.before}`).join(`• ${b.after}`), doc));
+      if (out.letter) setLetterDoc(out.letter);
+      setReword(out);
+    } catch {
+      setReword({ note: 'Could not reach the AI just now. Your documents are unchanged.', bullets: [], kept: [], letter: null, dropped: 0, questions: [] });
+    } finally {
+      setRewording(false);
+    }
+  }
 
   /* Sending is two deliberate steps: prepare puts the letter in Instantly as a
      draft, send is the one that reaches a person. They are never combined. */
@@ -966,10 +1063,49 @@ function MaterialsPanel({ data, onClose, onEmailed }: { data: Materials; onClose
           </>
         )}
 
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={rewordWithAi} disabled={rewording || !!(reword && !reword.note)}
+            className="rounded-lg border border-violet-300/40 bg-violet-400/10 px-3 py-1.5 text-[12px] font-semibold text-violet-100 hover:border-violet-200/70 disabled:opacity-50">
+            {rewording ? 'Rewording…' : reword && !reword.note ? 'Reworded with AI ✓' : 'Reword with AI'}
+          </button>
+          <span className="text-[11px] leading-relaxed text-white/40">
+            Your bullets and letter, said for this job. Every line is checked against your resume; nothing new is added.
+          </span>
+        </div>
+        {reword && (
+          <div className="mb-5 rounded-2xl border border-violet-300/25 bg-violet-400/[0.06] p-4 text-[12px] leading-relaxed text-white/70">
+            {reword.note ? <p>{reword.note}</p> : (
+              <>
+                <p>
+                  {reword.bullets.length
+                    ? `The AI reworded ${reword.bullets.length} bullet${reword.bullets.length === 1 ? '' : 's'} for this job, each checked against your resume.`
+                    : 'The AI found nothing to reword without adding something new, so your bullets are as you wrote them.'}
+                  {' '}{reword.letter
+                    ? `The cover letter is the AI's${reword.dropped ? `, with ${reword.dropped} sentence${reword.dropped === 1 ? '' : 's'} left out for saying something your resume does not` : ''}.`
+                    : "The cover letter is still the agent's own: the AI's did not pass the check."}
+                </p>
+                {reword.kept.length > 0 && (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-white/55">
+                    {reword.kept.map((k) => <li key={k.before}>Kept as you wrote it: "{k.before}" ({k.why}).</li>)}
+                  </ul>
+                )}
+                {reword.questions.length > 0 && (
+                  <div className="mt-3">
+                    <p className="font-semibold text-violet-100">Answer these to make it stronger, then add the numbers yourself if they are true:</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-white/60">
+                      {reword.questions.map((q) => <li key={q}>{q}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         <Doc
           title="Tailored resume"
-          meta={`keyword match ${data.resume.ats.before}% → ${data.resume.ats.after}%${data.resume.ats.passes ? ' · passes' : ''}`}
-          text={data.resume.text}
+          meta={`keyword match ${data.resume.ats.before}% → ${data.resume.ats.after}%${data.resume.ats.passes ? ' · passes' : ''}${reword && reword.bullets.length ? ' · before rewording' : ''}`}
+          text={resumeDoc}
           onCopy={copy}
         />
 
@@ -988,8 +1124,8 @@ function MaterialsPanel({ data, onClose, onEmailed }: { data: Materials; onClose
 
         <Doc
           title="Cover letter"
-          meta={`${data.coverLetter.words} words`}
-          text={data.coverLetter.text}
+          meta={`${letterDoc.words} words`}
+          text={letterDoc.text}
           onCopy={copy}
         />
       </div>

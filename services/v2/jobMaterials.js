@@ -28,6 +28,9 @@ const CLICHES = Object.freeze([
   'proven track record', 'hit the ground running', 'wear many hats'
 ]);
 
+/* A bullet without its own marker ("- ", "• ", "▪ "), so one can be added once. */
+const strip = (s) => String(s).replace(/^\s*[-*•▪◦‣·–—]+\s*/, '').trim();
+
 /** Split a resume into labelled sections so bullets can be reordered. */
 function sectionsOf(resumeText) {
   const lines = String(resumeText || '').split(/\r?\n/);
@@ -136,7 +139,7 @@ function tailorResume(profile, job, resumeText) {
   doc.push([...jobSkills, ...provenSkills.filter((s) => !jobSkills.includes(s))].join(' · '));
   doc.push('');
   doc.push('EXPERIENCE & PROJECTS');
-  ordered.forEach((b) => doc.push('• ' + b.text));
+  ordered.forEach((b) => doc.push('• ' + strip(b.text)));
   if (education) {
     doc.push('');
     doc.push('EDUCATION');
@@ -206,7 +209,6 @@ function coverLetter(profile, job, resumeText) {
 
   /* The one piece of work they chose to lead with, in their own words and
      ahead of anything picked by keyword overlap. */
-  const strip = (s) => String(s).replace(/^\s*[-*•▪◦‣·–—]+\s*/, '').trim();
   if (p.lead) {
     body.push(`The work I would point to first: ${strip(p.lead).replace(/\.$/, '')}.`);
     body.push('');
@@ -438,5 +440,5 @@ function fileName(name, job, kind) {
 
 module.exports = {
   tailorResume, coverLetter, coldEmail, hrEmail,
-  sectionsOf, bulletsOf, prioritise, CLICHES
+  sectionsOf, bulletsOf, prioritise, strip, CLICHES
 };
