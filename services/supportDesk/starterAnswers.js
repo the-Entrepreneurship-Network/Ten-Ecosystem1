@@ -380,6 +380,24 @@ module.exports = [
             '• Messages, in the sidebar, lets you write privately to a coordinator or to HR.'
     },
     {
+        key: 'internship-role',
+        question: 'What is my official designation, who is my mentor, and which team do I join?',
+        examples: [
+            'what is my designation', 'what is my official role', 'what title should i put on linkedin',
+            'designation not mentioned in offer letter', 'who is my mentor', 'who is my assigned mentor',
+            'which team should i join', 'team allocation', 'where will i get my tasks and instructions',
+            'clarification regarding internship role mentor and team'
+        ],
+        answer: 'Your offer letter confirms a position as an intern at The Entrepreneurship Network (TEN), in the ' +
+            'Domain shown in the box on the letter. On your resume and LinkedIn, use "<your Domain> Intern" at The ' +
+            'Entrepreneurship Network (TEN), with the Domain written exactly as on your letter.\n\n' +
+            'Your mentor and point of contact is your domain coordinator: the "My Coordinator" card on your dashboard ' +
+            'shows their name, email and WhatsApp number.\n\n' +
+            'Your team is your domain group. Open Guidelines, then Communication & Support, on the dashboard to join ' +
+            "your domain's WhatsApp group. Your weekly tasks are in 🪙 Task Journey, and tasks your coordinator posts " +
+            'are under My Tasks.'
+    },
+    {
         key: 'whatsapp-group',
         question: 'How do I join the WhatsApp group?',
         examples: [
