@@ -229,7 +229,13 @@ portal hides by level is hidden in the browser only.
   also breaks the tracking and unsubscribe links in every Growth email already
   sent**, because those links are signed with the same key.
 - **One session per student:** a new sign-in supersedes the old one
-  (`verifySingleSession` in `server.js`).
+  (`verifySingleSession` in `server.js`). One browser holds one session for
+  every portal, so HR, a coordinator, a founder and a student can be signed in
+  on tabs of the same window. The guard therefore checks the session's own
+  token (`session.sessionToken`, written only by student sign-ins) against the
+  session's student, never a token from a request header: HR's
+  `Authorization: Bearer hr_…` checked against a student on another tab used
+  to sign HR out the moment the HR portal opened.
 
 There is no OTP, magic-link or Google sign-in. Password reset sends a one-hour
 link (`/reset-password.html?token=…`).

@@ -35,9 +35,10 @@ function lift(name) {
 }
 
 // eslint-disable-next-line no-new-func
-const { sessionIsSuperseded } = new Function(`
+const { sessionIsSuperseded, sessionCredentials } = new Function(`
   ${lift('sessionIsSuperseded')}
-  return { sessionIsSuperseded };
+  ${lift('sessionCredentials')}
+  return { sessionIsSuperseded, sessionCredentials };
 `)();
 
 const FRESH = 'ten_sess_fresh';
@@ -88,5 +89,35 @@ describe('a genuinely replaced session is still rejected', () => {
   it('rejects when the only record on file moved on', () => {
     expect(sessionIsSuperseded(STALE, [FRESH])).toBe(true);
     expect(sessionIsSuperseded(STALE, [null, FRESH])).toBe(true);
+  });
+});
+
+describe('HR, coordinators and founders on the same browser as a student', () => {
+  // One browser holds one session for every portal: a student on one tab and
+  // HR on the next share it.
+  const SHARED = { student: { _id: 'stu1' }, sessionToken: FRESH, hr: { email: 'hr@ten.test' } };
+
+  it('checks the session\'s own token, not HR\'s Authorization header', () => {
+    // The HR page sends "Bearer hr_…". Checked against the student, it refused
+    // every HR request and the HR portal signed HR out the moment it opened.
+    const c = sessionCredentials({ headers: { authorization: 'Bearer hr_hrdirector' }, session: SHARED });
+    expect(c).toEqual({ clientToken: FRESH, userId: 'stu1' });
+    expect(sessionIsSuperseded(c.clientToken, [FRESH])).toBe(false);
+  });
+
+  it('still refuses once the student signs in somewhere else', () => {
+    const c = sessionCredentials({ headers: {}, session: { ...SHARED, sessionToken: STALE } });
+    expect(sessionIsSuperseded(c.clientToken, [FRESH])).toBe(true);
+  });
+
+  it('uses a header token only with the x-user-id it belongs to', () => {
+    expect(sessionCredentials({ headers: { 'x-user-id': 'u9', 'x-session-token': STALE }, session: SHARED }))
+      .toEqual({ clientToken: STALE, userId: 'u9' });
+  });
+
+  it('a founder signing in does not overwrite the student\'s token', () => {
+    // /login runs for every ecosystem role. Writing a founder's token over the
+    // student's made every request from that browser look superseded.
+    expect(source).toMatch(/if \(user\.role === 'student'\) req\.session\.sessionToken = sessionToken;/);
   });
 });
