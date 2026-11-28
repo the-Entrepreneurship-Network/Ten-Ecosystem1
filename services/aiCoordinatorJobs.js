@@ -485,7 +485,7 @@ async function reviewBacklog() {
             }
             const done = out.checked + out.approved + out.changes;
             if (network && done % 10 === 0) console.log(`[ai-coordinator] backlog: ${out.checked} pre-checked, ${out.approved} approved, ${out.changes} asked for changes so far.`);
-            if (network) await module.exports._internal.wait(check && check.repo && !process.env.GITHUB_TOKEN ? GITHUB_PAUSE_MS : PAUSE_MS);
+            if (network) await module.exports._internal.wait(check && check.repo && !(precheck.githubTokenWorks ? precheck.githubTokenWorks() : process.env.GITHUB_TOKEN) ? GITHUB_PAUSE_MS : PAUSE_MS);
         }
     } finally {
         backlogRunning = false;

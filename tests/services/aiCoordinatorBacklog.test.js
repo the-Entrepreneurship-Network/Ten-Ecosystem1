@@ -214,6 +214,20 @@ describe('the review of the waiting submissions', () => {
         expect(wait.mock.calls).toEqual([[10 * 1000]]);
     });
 
+    it('a GITHUB_TOKEN GitHub refused counts as no token: the long pause', async () => {
+        process.env.GITHUB_TOKEN = 'expired';
+        const precheck = require('../../services/submissionPrecheck');
+        precheck.githubTokenWorks = () => false;
+        try {
+            mockState.submissions = [sub('s1', { githubLink: 'https://github.com/a/b' })];
+            mockState.checks.s1 = { repo: { public: true, fullName: 'a/b' } };
+            await jobs.reviewBacklog();
+            expect(wait.mock.calls).toEqual([[150 * 1000]]);
+        } finally {
+            delete precheck.githubTokenWorks;
+        }
+    });
+
     it('past the day\'s pre-check limit it makes no new checks but still decides the fresh ones', async () => {
         const limit = jobs._internal.PRECHECKS_PER_DAY;
         mockState.logs = Array.from({ length: limit }, () => ({ kind: 'precheck', createdAt: new Date() }));

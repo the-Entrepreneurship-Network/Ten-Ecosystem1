@@ -1063,10 +1063,17 @@ hidden from Messages.
   - The pre-check itself never writes `feedback` or `status`. The step it
     replaced wrote Gemini's text into `feedback`, where the student saw it as
     "COORDINATOR FEEDBACK".
-  - Without `GITHUB_TOKEN` GitHub allows 60 lookups an hour from the server
-    (2 per check); past that the repository line says "not checked". A free
-    token raises it to 5,000; a token GitHub refuses is dropped and the check
-    asks without it.
+  - A GitHub repository link is checked through GitHub, never by opening its
+    page: GitHub turns away page requests from servers (429), which used to
+    read as "the link does not open". The API gives every file (the whole
+    tree, so work in a subfolder is seen; a `/tree/<branch>/<folder>` link
+    lists that folder first). Without `GITHUB_TOKEN` the API allows 60
+    lookups an hour from the server (2 per check); a free token raises it to
+    5,000, and a token GitHub refuses is dropped (logged once). When the API
+    refuses, git itself is asked (`gitRefs`, the request `git clone` makes,
+    outside the API limit): it says public, private or empty, and the files
+    are "not read", so the submission waits for a person instead of being
+    rejected. The live self-test reports whether the token works.
   - **The review of waiting submissions** (`reviewBacklog`, a minute after
     every start, 02:05 and 08:35 IST). Every waiting submission, oldest first:
     a pre-check where none is fresh (under 24 hours, by the AI, and written
