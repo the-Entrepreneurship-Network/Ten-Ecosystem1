@@ -85,6 +85,23 @@ describe('who gets woken', () => {
     });
 });
 
+describe('each update is its own notification on the phone', () => {
+    it('carries a tag of its own, so a new update does not replace the last', async () => {
+        // Under one shared tag every update silently replaced the one before it,
+        // and Android had only ever one to count on the app icon.
+        const { svc, calls } = load();
+        await svc.mirror(personal({ _id: 'a1' }));
+        await svc.mirror(personal({ _id: 'b2' }));
+        expect(calls.map((c) => c.payload.tag)).toEqual(['notification-a1', 'notification-b2']);
+    });
+
+    it('without an id it falls back to the default tag rather than "notification-undefined"', async () => {
+        const { svc, calls } = load();
+        await svc.mirror(personal());
+        expect(calls[0].payload.tag).toBeUndefined();
+    });
+});
+
 describe('the id it sends to is the id subscriptions are stored under', () => {
     it('sends to targetEmployeeId, with no lookup in between', async () => {
         const { svc, calls } = load();

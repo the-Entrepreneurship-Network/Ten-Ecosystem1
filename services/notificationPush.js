@@ -53,7 +53,11 @@ async function mirror(doc) {
         const result = await push.sendToUser(doc.targetEmployeeId, {
             title: doc.title,
             body:  doc.message,
-            url:   LANDING
+            url:   LANDING,
+            // Its own tag, as in any app: each update is its own line in the
+            // phone's notification list, and Android counts them on the icon.
+            // Under the shared default tag every update replaced the last.
+            tag:   doc._id ? 'notification-' + doc._id : undefined
         });
 
         return { sent: result.sent > 0, devices: result.sent };

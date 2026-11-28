@@ -118,8 +118,30 @@ self.addEventListener('push', (event) => {
     actions: [{ action: 'open', title: 'Open' }]
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(title, options),
+    syncBadge()
+  ]));
 });
+
+/**
+ * The number on the app icon, as any app has: the same unread count the
+ * notification orb shows (portal updates plus conversations with something
+ * unread). Signed out or offline, a plain dot still says something arrived.
+ * Android has no badge API; its launcher draws a dot or a count from the
+ * notifications themselves.
+ */
+function syncBadge() {
+  const nav = self.navigator;
+  if (!nav || !nav.setAppBadge) return Promise.resolve();
+  return fetch('/api/notifications/unread-count', { credentials: 'include' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (d && typeof d.unread === 'number') return d.unread > 0 ? nav.setAppBadge(d.unread) : nav.clearAppBadge();
+      return nav.setAppBadge();
+    })
+    .catch(() => nav.setAppBadge().catch(() => {}));
+}
 
 /**
  * The notification was tapped.

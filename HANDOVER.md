@@ -434,6 +434,18 @@ loads.
     does not wait for them, so a loop of notices (the AI Coordinator's
     reminders, §7.14) would otherwise be one login per message, all at once.
   - Push stays dormant until VAPID keys are set (§12).
+  - **The count on the app icon**, as any app shows, is the same unread
+    number as the notification orb (`/api/notifications/unread-count`). The
+    orb sets it while a page is open (`navigator.setAppBadge`). The service
+    worker sets it when a push arrives with the app closed, or shows a dot
+    when it cannot ask. Android has no badge API: its launcher draws a dot or
+    count from the notifications themselves. So each portal update carries its
+    own tag and gets its own line, instead of replacing the last.
+  - Inside the installed app, the orb offers **Turn on notifications** once
+    per device, from a button, below `js/db-banner.js`'s warning bar. The
+    Notifications page keeps its own switch. Who can subscribe:
+    students, coordinators, HR and admin (`routes/push.js`). Founders, mentors,
+    investors and contractors cannot yet.
   - A second system, `EcosystemNotification`, is written by several features
     but **never shown** anywhere (§17).
 - **Chat.** Domain rooms, staff rooms and DMs, with reply-to-a-message (#260),
