@@ -358,7 +358,7 @@ td, th, p, li, dd, dt, h1, h2, h3, h4 {
    * price, and mostly reads as breathing room.
    */
   nav a, header a, footer a,
-  .hero-strip a, .nh-credits a,
+  .hero-strip a, .hero-strip .install-app, .nh-credits a,
   .back, .back-btn, .ghost, .linky,
   a.linky, a.back, button.ghost {
     display: inline-flex;

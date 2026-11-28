@@ -20,7 +20,7 @@
 
 // Bumped whenever SHELL_ASSETS changes: activate deletes every cache that is
 // not the current one, so an old worker's copy cannot outlive the list.
-const SHELL_CACHE = 'ten-shell-v4';
+const SHELL_CACHE = 'ten-shell-v5';
 const SHELL_ASSETS = [
   '/offline.html',
   '/manifest.webmanifest',

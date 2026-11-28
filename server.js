@@ -2042,14 +2042,18 @@ app.get("/sw.js", (req, res) => {
 // The correct type is application/manifest+json. Served as anything else, some
 // browsers ignore the manifest and the app silently stops being installable.
 //
-// There are three installable apps, and each needs its own manifest with its
-// own `id` — a browser decides "is this the same app I already installed?" from
-// the id, so two manifests sharing one would be a single install that simply
+// There are two installable apps, and each needs its own manifest with its own
+// `id` — a browser decides "is this the same app I already installed?" from the
+// id, so two manifests sharing one would be a single install that simply
 // changed its start page.
 //
-//   manifest.json                    "TEN Portal"             starts at /
-//   manifest.webmanifest             "TEN Internship Portal"  starts at /student-dashboard
-//   manifest-notifications.webmanifest "TEN Notifications"    starts at /notifications
+//   manifest.webmanifest             "TEN Portal"         the whole site; opens at /app
+//   manifest-notifications.webmanifest "TEN Notifications" starts at /notifications
+//
+// The portal app keeps the id "/student-dashboard" it was first installed
+// under: changing an id strands every existing install. /app (routes/appStart.js)
+// opens each signed-in person's own space. A third manifest, manifest.json,
+// was a second copy of the portal under another id; it is gone.
 app.get("/manifest.webmanifest", (req, res) => {
     res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=3600");
@@ -3525,6 +3529,8 @@ app.get("/mentor-login",      (req,res)=>{ res.sendFile(path.join(__dirname,"pub
 app.get("/investor-login",    (req,res)=>{ res.sendFile(path.join(__dirname,"public","investor-login.html")); });
 app.get("/contractor-login",  (req,res)=>{ res.sendFile(path.join(__dirname,"public","contractor-login.html")); });
 app.get("/login",             (req,res)=>{ res.sendFile(path.join(__dirname,"public","login.html")); });
+// The installed app's start page: each signed-in person's own space, else home.
+app.use(require("./routes/appStart"));
 app.get("/student-dashboard", (req,res)=>{ res.sendFile(path.join(__dirname,"public","student-dashboard.html")); });
 // Direct messages, for every role. The page derives identity from the
 // session, so one URL serves students, coordinators, HR and admin.

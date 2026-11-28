@@ -1,23 +1,23 @@
 'use strict';
 
 /**
- * Three installable apps, one notification orb, and one notification section.
+ * Two installable apps, one notification orb, and one notification section.
  *
- * The portal was installable twice — as "TEN Portal" from the landing page and
- * as "TEN Internship Portal" from the dashboard. Notifications makes three, so
- * a student can keep alerts on their home screen without opening the whole
- * portal to check them.
+ * The portal is one app for the whole site, "TEN Portal" (it was once
+ * installable twice, under two ids, which put two copies of the same site on a
+ * home screen). Notifications is the second, so a student can keep alerts on
+ * their home screen without opening the whole portal to check them.
  *
  * Two things have to hold for that to work at all, and neither is visible by
  * looking at the page:
  *
  *   - Each manifest needs its OWN `id`. A browser decides "have I already
  *     installed this?" from the id, so two manifests sharing one are a single
- *     install that merely changed its start page — the third app would silently
- *     replace the second.
+ *     install that merely changed its start page — the alerts app would
+ *     silently replace the portal.
  *
- *   - The icons have to differ. Three identical tiles on a home screen make the
- *     extra installs worse than useless.
+ *   - The icons have to differ. Two identical tiles on a home screen make the
+ *     second install worse than useless.
  *
  * The other half of this change removed the dashboard's own bell and slide-in
  * panel. It was the SECOND notification system on that page: the sidebar
@@ -33,26 +33,24 @@ const root = path.join(__dirname, '../..');
 const readPublic = (f) => fs.readFileSync(path.join(root, 'public', f), 'utf8');
 const readJson = (f) => JSON.parse(readPublic(f));
 
-const portalJson = readJson('manifest.json');
 const portalWeb = readJson('manifest.webmanifest');
 const alerts = readJson('manifest-notifications.webmanifest');
 
-describe('three apps, three identities', () => {
+describe('two apps, two identities', () => {
   it('the notifications app opens onto the notifications page', () => {
     expect(alerts.start_url).toBe('/notifications');
   });
 
   it('every manifest declares a distinct id', () => {
-    // THE ONE THAT MATTERS. Without it the third install is not a third app.
-    const ids = [portalJson.id || portalJson.start_url,
-                 portalWeb.id || portalWeb.start_url,
+    // THE ONE THAT MATTERS. Without it the alerts install is not a second app.
+    const ids = [portalWeb.id || portalWeb.start_url,
                  alerts.id || alerts.start_url];
-    expect(new Set(ids).size).toBe(3);
+    expect(new Set(ids).size).toBe(2);
   });
 
   it('is named so it is tellable apart in an app list', () => {
-    const names = [portalJson.name, portalWeb.name, alerts.name];
-    expect(new Set(names).size).toBe(3);
+    const names = [portalWeb.name, alerts.name];
+    expect(new Set(names).size).toBe(2);
     expect(alerts.name).toMatch(/notification/i);
   });
 
