@@ -163,6 +163,12 @@ describe('Thursdays and Sundays', () => {
 });
 
 describe("the coordinators' summary", () => {
+    // The summary runs "on" FRIDAY, but the attendance figures it reads count
+    // working days up to the real clock. Pin the clock to FRIDAY as well, or
+    // the "two days in" student below ages with every real day: from 28 Nov
+    // she had three working days and was judged, and these tests failed.
+    beforeAll(() => jest.useFakeTimers({ now: FRIDAY, doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'queueMicrotask', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] }));
+    afterAll(() => jest.useRealTimers());
     beforeEach(() => {
         mockState.students = [
             student('TEN/WEB/1001', { name: 'Asha Verma' }),
