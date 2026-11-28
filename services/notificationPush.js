@@ -69,4 +69,34 @@ async function mirror(doc) {
     }
 }
 
-module.exports = { mirror, LANDING };
+/**
+ * A founder's, mentor's, investor's or contractor's own notification
+ * (models/EcosystemNotification.js) to their phone. Their subscriptions are
+ * stored under their email, the id chat and the feed know them by
+ * (services/chatIdentity.js), so one lookup turns the account id into it.
+ *
+ * @param {object} doc a saved EcosystemNotification
+ * @returns {Promise<{sent: boolean, reason?: string, devices?: number}>}
+ */
+async function mirrorEcosystem(doc) {
+    try {
+        if (!doc || !(doc.$locals && doc.$locals.wasNew)) return { sent: false, reason: 'not new' };
+        const push = require('./pushService');
+        if (!push.isEnabled()) return { sent: false, reason: 'push not configured' };
+        const user = await require('../models/EcosystemUser').findById(doc.userId).select('email').lean();
+        const email = user && String(user.email || '').trim();
+        if (!email) return { sent: false, reason: 'no recipient' };
+        const result = await push.sendToUser(email, {
+            title: doc.title,
+            body:  doc.message,
+            url:   doc.link || '/notifications',
+            tag:   'notification-' + doc._id
+        });
+        return { sent: result.sent > 0, devices: result.sent };
+    } catch (err) {
+        console.error('[notification-push] ecosystem send failed:', err.message);
+        return { sent: false, reason: err.message };
+    }
+}
+
+module.exports = { mirror, mirrorEcosystem, LANDING };

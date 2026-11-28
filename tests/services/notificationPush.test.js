@@ -23,22 +23,27 @@ const path = require('path');
 
 const root = path.join(__dirname, '../..');
 const hookSrc  = fs.readFileSync(path.join(root, 'models/Notification.js'), 'utf8');
-const pushRoute = fs.readFileSync(path.join(root, 'routes/push.js'), 'utf8');
 const mirrorSrc = fs.readFileSync(path.join(root, 'services/notificationPush.js'), 'utf8');
 
 /** Load the mirror with pushService stubbed. */
-function load({ enabled = true, sent = 1, throws = null } = {}) {
+function load({ enabled = true, sent = 1, throws = null, user = { email: 'founder@x.test' } } = {}) {
     jest.resetModules();
     const calls = [];
+    const saved = [];
     jest.doMock('../../services/pushService', () => ({
         isEnabled: () => enabled,
+        getPublicKey: () => 'public-key',
+        saveSubscription: async (userId, role) => { saved.push([userId, role]); },
         sendToUser: async (userId, payload) => {
             calls.push({ userId, payload });
             if (throws) throw new Error(throws);
             return { sent, removed: 0, failed: 0 };
         }
     }));
-    return { svc: require('../../services/notificationPush'), calls };
+    jest.doMock('../../models/EcosystemUser', () => ({
+        findById: () => ({ select: () => ({ lean: async () => user }) })
+    }));
+    return { svc: require('../../services/notificationPush'), calls, saved };
 }
 
 const personal = (over = {}) => ({
@@ -109,11 +114,50 @@ describe('the id it sends to is the id subscriptions are stored under', () => {
         expect(calls[0].userId).toBe('TEN/AI/9999');
     });
 
-    it('and the subscribe route keys a student on employeeId', () => {
-        // The pair that has to agree. If routes/push.js ever resolves a
-        // student to something else — an _id, an email — every push here goes
-        // to nobody and nothing reports it.
-        expect(pushRoute).toMatch(/role:\s*'student',\s*id:\s*s\.student\.employeeId/);
+    it('and the subscribe route stores each person under that same id', async () => {
+        // The pair that has to agree. If routes/push.js ever resolves someone
+        // to another id — an _id for a student, a user id for a founder — every
+        // push here goes to nobody and nothing reports it.
+        const { saved } = load();
+        const express = require('express');
+        const request = require('supertest');
+        const as = (session) => {
+            const app = express();
+            app.use(express.json());
+            app.use((req, _res, next) => { req.session = session; next(); });
+            app.use('/api/push', require('../../routes/push'));
+            return request(app).post('/api/push/subscribe').send({ subscription: { endpoint: 'https://push.test/1' } });
+        };
+        await as({ student: { employeeId: 'TEN/AI/9999' } }).expect(200);
+        await as({ ecosystemUserId: '64b0c0ffee0000000000f00d', ecosystemUserRole: 'founder', ecosystemUserEmail: 'founder@x.test' }).expect(200);
+        await as({}).expect(401);
+        expect(saved).toEqual([['TEN/AI/9999', 'student'], ['founder@x.test', 'founder']]);
+    });
+});
+
+describe('founders, mentors, investors and contractors', () => {
+    const own = (over = {}) => ({
+        _id: 'e1', userId: '64b0c0ffee0000000000f00d', title: 'New investor interest',
+        message: 'An investor wants to talk.', link: '/founder-os.html#investors', $locals: { wasNew: true }, ...over
+    });
+
+    it('a new one reaches their phone under their email, the id they sign up with', async () => {
+        const { svc, calls } = load();
+        await expect(svc.mirrorEcosystem(own())).resolves.toMatchObject({ sent: true, devices: 1 });
+        expect(calls).toEqual([{ userId: 'founder@x.test', payload: expect.objectContaining({
+            title: 'New investor interest', url: '/founder-os.html#investors', tag: 'notification-e1' }) }]);
+    });
+
+    it('marking one read saves it again and wakes nobody', async () => {
+        const { svc, calls } = load();
+        await expect(svc.mirrorEcosystem(own({ $locals: {} }))).resolves.toMatchObject({ sent: false, reason: 'not new' });
+        expect(calls).toHaveLength(0);
+    });
+
+    it('an account that is gone is a quiet no', async () => {
+        const { svc, calls } = load({ user: null });
+        await expect(svc.mirrorEcosystem(own())).resolves.toMatchObject({ sent: false, reason: 'no recipient' });
+        expect(calls).toHaveLength(0);
     });
 });
 

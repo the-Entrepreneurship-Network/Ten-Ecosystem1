@@ -23,7 +23,7 @@ const request = require('supertest');
 const HOUR = 3600 * 1000;
 const now = Date.now();
 
-const mockState = { notifications: [], messages: [], reads: {}, fail: false };
+const mockState = { notifications: [], messages: [], reads: {}, own: [], ownQueried: false, fail: false };
 
 function mockQ(result) {
   const o = {
@@ -77,6 +77,20 @@ jest.mock('../../models/ChatRead', () => ({
   markRead: async () => ({})
 }));
 
+/** A founder's, mentor's, investor's or contractor's own rows. */
+function mockOwn(filter) {
+  mockState.ownQueried = true;
+  return mockState.own.filter((n) => String(n.userId) === String(filter.userId) &&
+    (filter.isRead === undefined || n.isRead === filter.isRead))
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+jest.mock('../../models/EcosystemNotification', () => ({
+  countDocuments: async (f) => mockOwn(f).length,
+  findOne: (f) => mockQ(mockOwn(f)[0] || null),
+  find: (f) => mockQ(mockOwn(f)),
+  updateMany: async (f) => { mockOwn(f).forEach((n) => { n.isRead = true; }); return {}; }
+}));
+
 jest.mock('../../models/Student', () => ({
   findOne: () => mockQ({ domain: 'Artificial Intelligence' })
 }));
@@ -100,6 +114,8 @@ beforeEach(() => {
   mockState.notifications = [];
   mockState.messages = [];
   mockState.reads = {};
+  mockState.own = [];
+  mockState.ownQueried = false;
   mockState.fail = false;
 });
 
@@ -213,6 +229,45 @@ describe('staff are found under every id they are known by', () => {
     ];
     const res = await get(HR);
     expect(res.body.messages).toBe(0);
+  });
+});
+
+describe('founders, mentors, investors and contractors', () => {
+  // Their notifications live in their own table, keyed on the account id that
+  // /login puts in the session. Nothing read it, so the orb never lit for them.
+  const ME = '64b0c0ffee0000000000f00d';
+  const FOUNDER = { ecosystemUserId: ME, ecosystemUserRole: 'founder', ecosystemUserEmail: 'founder@x.test', ecosystemUserName: 'Asha' };
+  const own = (over) => ({ userId: ME, isRead: false, title: 'New investor interest', message: 'An investor wants to talk.',
+    link: '/founder-os.html#investors', createdAt: new Date(now - HOUR), ...over });
+
+  it('counts their own unread and sends a click to the place it is about', async () => {
+    mockState.notifications = [{ read: false, title: 'Older update', createdAt: new Date(now - 5 * HOUR) }];
+    mockState.own = [own({ _id: 'e1' }), own({ _id: 'e2', isRead: true }), own({ _id: 'e3', userId: '64b0c0ffee0000000000beef' })];
+    const res = await get(FOUNDER);
+    expect(res.body.notifications).toBe(2);     // one for everyone, one of their own
+    expect(res.body.unread).toBe(2);
+    expect(res.body.latest).toMatchObject({ kind: 'portal', url: '/founder-os.html#investors', title: 'New investor interest' });
+  });
+
+  it('lists them, and mark all read clears them', async () => {
+    mockState.own = [own({ _id: 'e1' })];
+    const app = appWith(FOUNDER);
+    const feed = await request(app).get('/api/notifications/feed');
+    expect(feed.body.items).toEqual([expect.objectContaining({ id: 'eco:e1', title: 'New investor interest', read: false, url: '/founder-os.html#investors' })]);
+    await request(app).post('/api/notifications/read-all').expect(200);
+    expect((await get(FOUNDER)).body.unread).toBe(0);
+  });
+
+  it('drops a link that leaves the site instead of following it', async () => {
+    mockState.own = [own({ _id: 'e1', link: 'javascript:alert(1)' }), own({ _id: 'e2', link: '//evil.test', createdAt: new Date(now - 2 * HOUR) })];
+    const feed = await request(appWith(FOUNDER)).get('/api/notifications/feed');
+    expect(feed.body.items.map((i) => i.url)).toEqual([null, null]);
+    expect((await get(FOUNDER)).body.latest.url).toBe('/notifications');
+  });
+
+  it('is not looked up for a student, whose session carries the same keys', async () => {
+    await get({ ...STUDENT, ecosystemUserId: ME, ecosystemUserRole: 'student' });
+    expect(mockState.ownQueried).toBe(false);
   });
 });
 
