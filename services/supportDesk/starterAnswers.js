@@ -459,16 +459,19 @@ module.exports = [
             'upload failed could not reach the server', 'could not reach the server check your connection and try again',
             'repeated server issues when uploading my documents', 'server error while uploading address proof and marksheet',
             'document upload shows upload failed', 'marksheet upload failed server issue', 'address proof upload not working server problem',
-            'facing server issue while uploading documents in my profile', 'upload keeps failing on my phone'
+            'facing server issue while uploading documents in my profile', 'upload keeps failing on my phone',
+            'same problem again and my pdf is under 10 mb', 'could not open the file'
         ],
         answer: '"Could not reach the server" is shown by your browser when the connection dropped while the file was being ' +
             'sent, before the portal could answer. It usually means the upload did not get through on that connection, ' +
             'not that the portal is down.\n\n' +
             'Please try again like this:\n' +
-            '1. Connect to Wi-Fi, or a different network from the one you used. Mobile data sometimes drops a longer upload.\n' +
-            '2. Stay on the My Documents page until the green tick appears, without switching apps.\n' +
-            '3. Check that each PDF is under 25 MB. A scanned marksheet can be large; a smaller scan uploads far more reliably.\n' +
-            '4. If you have a laptop, try from there.\n\n' +
+            '1. On a phone, save the PDF to your phone first (for example in Downloads) and choose it from there, not ' +
+            'straight from Google Drive or WhatsApp.\n' +
+            '2. Connect to Wi-Fi, or a different network from the one you used. Mobile data sometimes drops a longer upload.\n' +
+            '3. Stay on the My Documents page until the green tick appears, without switching apps.\n' +
+            '4. Check that each PDF is under 25 MB. A scanned marksheet can be large; a smaller scan uploads far more reliably.\n' +
+            '5. If you have a laptop, try from there.\n\n' +
             'If it still fails, tell us the size of each file in MB, the network you used, and the exact message you see.'
     },
     {
