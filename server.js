@@ -4132,7 +4132,11 @@ try{
             // notification feed identify this account by email and name.
             req.session.ecosystemUserEmail = user.email;
             req.session.ecosystemUserName = user.fullName || '';
-            req.session.sessionToken = sessionToken;
+            // The session's token guards the student signed in here
+            // (verifySingleSession). A founder's token written over it, in a
+            // browser where a student was signed in too, made every request
+            // from that browser look like a login from somewhere else.
+            if (user.role === 'student') req.session.sessionToken = sessionToken;
 
             loginEvents.record(req, { userType: user.role, userId: String(user._id), label: user.fullName, email: user.email, portal: "/login" });
             return res.json({
@@ -4367,10 +4371,35 @@ function sessionIsSuperseded(clientToken, knownTokens) {
     return !known.includes(clientToken);
 }
 
+/**
+ * Which token to check, against which account.
+ *
+ * Both come from the same place: the session's own token for the session's
+ * student, or a header token for the x-user-id sent beside it.
+ *
+ * The token used to come from any Authorization header while the account came
+ * from the session. One browser holds one session for every portal, so HR's
+ * own header ("Bearer hr_…") was compared with the student signed in on
+ * another tab: every HR request answered 401 SESSION_SUPERSEDED, and the HR
+ * portal signed HR out the moment it opened.
+ *
+ * @returns {{clientToken: (string|undefined), userId: (string|undefined)}}
+ */
+function sessionCredentials(req) {
+    const headerUserId = req.headers['x-user-id'];
+    if (headerUserId) {
+        return {
+            clientToken: req.headers['x-session-token'] || String(req.headers['authorization'] || '').replace('Bearer ', ''),
+            userId: headerUserId
+        };
+    }
+    const s = req.session || {};
+    return { clientToken: s.sessionToken, userId: (s.student && s.student._id) || (s.user && s.user._id) };
+}
+
 async function verifySingleSession(req, res, next) {
     try {
-        const clientToken = req.headers['x-session-token'] || (req.headers['authorization'] ? req.headers['authorization'].replace('Bearer ', '') : '') || req.session?.sessionToken;
-        const userId = req.headers['x-user-id'] || req.session?.student?._id || req.session?.user?._id;
+        const { clientToken, userId } = sessionCredentials(req);
 
         if (!clientToken || !userId) {
             return next();
