@@ -96,6 +96,10 @@ describe('the home page offers to install it', () => {
     it('has a hidden button that the install script reveals', () => {
         expect(home).toMatch(/<span id="installWrap" hidden>[^<]*<button type="button" id="installApp"/);
         expect(home).toContain('src="/install-app.js"');
+        // A button of its own line once revealed, and never before: a plain
+        // "#installWrap { display:block }" would beat the hidden attribute.
+        expect(home).toContain('#installWrap:not([hidden]) { display:block;');
+        expect(home).not.toMatch(/#installWrap\s*\{[^}]*display/);
     });
 
     it('opens the browser\'s own install dialog, and says how on an iPhone', () => {

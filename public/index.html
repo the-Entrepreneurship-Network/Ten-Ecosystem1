@@ -169,8 +169,13 @@
   .hero-strip { display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#333; padding-bottom:6px; flex-wrap:wrap; gap:8px; }
   .hero-strip a { color:#0a0a0a; text-decoration:none; }
   .hero-strip a:hover { text-decoration:underline; }
-  .hero-strip .install-app { font:inherit; color:#0a0a0a; background:none; border:0; padding:0; cursor:pointer; letter-spacing:inherit; }
-  .hero-strip .install-app:hover { text-decoration:underline; }
+  /* A black pill on its own line, like "Start my journey": as a small word at
+     the end of the links it went unnoticed. :not([hidden]) keeps the hidden
+     attribute in charge until install-app.js reveals it. */
+  #installWrap:not([hidden]) { display:block; margin-top:14px; }
+  .hero-strip .install-app { font:inherit; font-size:14px; font-weight:700; letter-spacing:.1em; color:#fff; background:#0a0a0a; border:0; border-radius:999px; padding:14px 28px; cursor:pointer; text-align:center; }
+  .hero-strip .install-app:hover { background:#2b2b2b; }
+  .hero-strip .install-app:focus-visible { outline:3px solid #d4af37; outline-offset:3px; }
 
   /* ---------- ecosystem CTA: the link out to the main company website ----------
      This is the internship portal; the band sends students to the main TEN
@@ -690,7 +695,7 @@
   </div>
   <div class="hero-strip">
     <h1 style="font:inherit;margin:0">The Entrepreneurship Network — virtual internships &amp; portals</h1>
-    <span><a href="academics.html">ACADEMICS</a> / <a href="student-portal/">STUDIO</a> / <a href="/domains">DOMAINS</a> / <a href="https://ten-biz-game.tenetwork.workers.dev" target="_blank" rel="noopener noreferrer">PLAYGROUND</a><span id="installWrap" hidden> / <button type="button" id="installApp" class="install-app">INSTALL APP</button></span></span>
+    <span><a href="academics.html">ACADEMICS</a> / <a href="student-portal/">STUDIO</a> / <a href="/domains">DOMAINS</a> / <a href="https://ten-biz-game.tenetwork.workers.dev" target="_blank" rel="noopener noreferrer">PLAYGROUND</a><span id="installWrap" hidden><button type="button" id="installApp" class="install-app">INSTALL APP</button></span></span>
   </div>
 </header>
 
