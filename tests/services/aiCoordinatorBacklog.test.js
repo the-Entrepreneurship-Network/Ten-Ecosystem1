@@ -122,7 +122,7 @@ describe('the decision on a pre-checked submission', () => {
     const { decide } = jobs._internal;
     const check = (extra) => Object.assign({ by: 'ai', match: 'yes', problems: [], draft: 'Nice.', link: { verdict: 'opens' }, repo: null }, extra);
 
-    it('approves only when every check passed and Gemini read it', () => {
+    it('approves only when every check passed and the AI read it', () => {
         expect(decide(check())).toEqual({ status: 'Approved', feedback: 'Nice.' });
         expect(decide(check({ match: 'partly' }))).toEqual({ status: 'Approved', feedback: 'Nice.' });
         expect(decide(check({ match: 'unclear' }))).toEqual({ status: 'Approved', feedback: 'Nice.' });
@@ -143,7 +143,7 @@ describe('the decision on a pre-checked submission', () => {
 
     it('waits for a person otherwise, and never decides without Gemini', () => {
         expect(decide(null)).toEqual({ wait: 'no pre-check yet' });
-        expect(decide(check({ by: 'rules' }))).toEqual({ wait: 'Gemini did not read it' });
+        expect(decide(check({ by: 'rules' }))).toEqual({ wait: 'the AI did not read it' });
         expect(decide(check({ link: { verdict: 'unknown' } }))).toEqual({ wait: 'the link could not be checked' });
         expect(decide(check({ link: { verdict: 'down' } }))).toEqual({ wait: 'the link could not be checked' });
         // A check that failed is never "approve", even with Gemini's blessing.
@@ -192,7 +192,7 @@ describe('the review of the waiting submissions', () => {
         expect(mail).toContain('Subject: [ai-coordinator] daily run: 3 approved, 1 asked for changes, 3 still waiting; 0 sent to HR for certificates');
         expect(mail).toContain('1. Reviewed submissions: 4 (3 approved, 1 asked for changes), after 5 pre-check(s).');
         expect(mail).toContain('"Week 1: Landing page" -> asked for changes: Before it can be approved: make it public.');
-        expect(mail).toContain('Still waiting for a coordinator: 3. Of these, 0 have no pre-check yet, 2 could not be checked automatically or Gemini did not read them (a person should look), and 1 are older than 60 days (left for a person).');
+        expect(mail).toContain('Still waiting for a coordinator: 3. Of these, 0 have no pre-check yet, 2 could not be checked automatically or the AI did not read them (a person should look), and 1 are older than 60 days (left for a person).');
         // A pause only after a check that went to the network.
         expect(wait).toHaveBeenCalledTimes(5);
     });
@@ -353,7 +353,7 @@ describe('the report', () => {
         expect(text).toContain('1. Reviewed submissions: 2 (1 approved, 1 asked for changes), after 1 pre-check(s).');
         expect(text).toContain('"Week 1: Landing page" -> approved: Clean page. Add alt text next time.');
         expect(text).toContain('"Week 2: API" -> asked for changes: The GitHub repository is private');
-        expect(text).toContain('Still waiting for a coordinator: 3. Of these, 1 have no pre-check yet, 1 could not be checked automatically or Gemini did not read them (a person should look), and 1 are older than 60 days (left for a person).');
+        expect(text).toContain('Still waiting for a coordinator: 3. Of these, 1 have no pre-check yet, 1 could not be checked automatically or the AI did not read them (a person should look), and 1 are older than 60 days (left for a person).');
         expect(text).toContain('2. Approved for certificates and sent to HR: 1.');
         expect(text).toContain('TEN/WEB/1006: attendance 88%, 7 tasks approved, internship ended 2026-11-20');
         expect(text).toContain('3. Reminders: 3 (2 sign-in, 1 unfinished week, 0 weekly progress).');

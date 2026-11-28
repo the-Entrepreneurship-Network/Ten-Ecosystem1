@@ -1036,7 +1036,7 @@ hidden from Messages.
       The status follows the AI's own decision, so an approval never carries
       "add this and submit it again". Feedback says what to fix.
     - Otherwise it waits for a person and is tried again next run: no
-      pre-check, Gemini did not read it, or the link could not be checked.
+      pre-check, the AI did not read it, or the link could not be checked.
       Older than 60 days: pre-checked, never decided. The daily report counts
       each of these.
     - Not final. A student's hand-in or resubmission is decided right after

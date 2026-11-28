@@ -19,8 +19,9 @@
  *                     coordinator's review path (a hand-in or resubmission is
  *                     decided right after its pre-check, and a coordinator can
  *                     change an AI decision): approved when every check
- *                     passed and Gemini read it, asked for changes when a
- *                     check failed or the work is not the task. The rest
+ *                     passed and the AI read it and found it the task, asked
+ *                     for changes when a check failed or the AI asked for
+ *                     them (not the task, or a main part missing). The rest
  *                     waits for a person and is named in the report. Then
  *                     the students whose internship ended in those 60 days
  *                     with 75% attendance and five approved tasks are
@@ -30,9 +31,10 @@
  *                     AI did in the last 24 hours; also when a backlog run ends.
  *
  * Every reminder and summary has a key, written before it is sent, so a second
- * run or a restart never sends it twice. Nothing here costs money: the
- * pre-check uses Gemini's free tier, email goes through the portal's own SMTP
- * account, and the report through the help desk's mailbox.
+ * run or a restart never sends it twice. Nothing here costs money unless the
+ * admin portal picks Claude for the reviews (paid, capped a month): the
+ * pre-check uses Gemini's free tier by default, email goes through the
+ * portal's own SMTP account, and the report through the help desk's mailbox.
  */
 
 const cron = require('node-cron');
@@ -383,7 +385,7 @@ function attach({ review, certificate } = {}) {
 function decide(check) {
     if (!check) return { wait: 'no pre-check yet' };
     if (check.problems && check.problems.length) return { status: 'Rejected', feedback: check.draft };
-    if (check.by !== 'ai') return { wait: 'Gemini did not read it' };
+    if (check.by !== 'ai') return { wait: 'the AI did not read it' };
     const opened = (check.link && check.link.verdict === 'opens') || (check.repo && check.repo.public && !check.repo.empty);
     if (!opened) return { wait: 'the link could not be checked' };
     if (check.match === 'no' || check.decision === 'changes') return { status: 'Rejected', feedback: check.draft };
@@ -582,7 +584,7 @@ function reportText(r) {
         ...r.reviews.slice(0, 5).map((p) => `   ${at(p.createdAt)}, ${p.employeeId}: "${clip(p.question, 70)}" -> ` +
             (p.source === 'approve' ? 'approved' : 'asked for changes') + (p.reply ? `: ${clip(p.reply, 120)}` : '')),
         `   Still waiting for a coordinator: ${r.waiting}. Of these, ${r.unchecked} have no pre-check yet, ` +
-            `${unsure} could not be checked automatically or Gemini did not read them (a person should look), ` +
+            `${unsure} could not be checked automatically or the AI did not read them (a person should look), ` +
             `and ${r.older} are older than ${REVIEW_DAYS} days (left for a person).`,
         `2. Approved for certificates and sent to HR: ${r.certificates.length}.`,
         ...r.certificates.slice(0, 5).map((c) => `   ${at(c.createdAt)}, ${c.employeeId}: ${clip(c.question, 100)}`),
@@ -591,7 +593,7 @@ function reportText(r) {
         `5. Interview Room: ${n(r.meetings, 'report')} interview(s) finished, ${n(r.meetings, 'interview')} question turn(s).`,
         ...r.meetings.filter((m) => m.source === 'report').slice(0, 5).map((m) => `   ${at(m.createdAt)}, ${m.employeeId}: ${clip(m.question, 40)}, ${clip(m.reply, 160)}`),
         '',
-        'The AI approves a submission only when every check passed and Gemini read it; it asks for changes when a check failed or the work is not the task.',
+        'The AI approves a submission only when every check passed and it read the work and found it the task; it asks for changes when a check failed, or when the work is not the task or is missing a main part of it.',
         'It approves a student for a certificate only when the internship has ended with 75% attendance and five approved tasks; HR still decides.',
         'Anything it could not check waits for a person. Each decision is labelled as the AI\'s in both dashboards.'
     ].join('\n');
