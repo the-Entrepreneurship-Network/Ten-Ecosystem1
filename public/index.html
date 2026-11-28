@@ -166,6 +166,8 @@
   .hero-strip { display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#333; padding-bottom:6px; flex-wrap:wrap; gap:8px; }
   .hero-strip a { color:#0a0a0a; text-decoration:none; }
   .hero-strip a:hover { text-decoration:underline; }
+  .hero-strip .install-app { font:inherit; color:#0a0a0a; background:none; border:0; padding:0; cursor:pointer; letter-spacing:inherit; }
+  .hero-strip .install-app:hover { text-decoration:underline; }
 
   /* ---------- ecosystem CTA: the link out to the main company website ----------
      This is the internship portal; the band sends students to the main TEN
@@ -587,6 +589,8 @@
   <!-- Without this the browser asks for /favicon.ico, which does not exist,
        and every visit logs a 404. -->
   <link rel="icon" href="/icons/icon-192.png" type="image/png">
+<script src="/push-client.js" defer></script>
+<script src="/install-app.js" defer></script>
 </head>
 <body class="locked">
 
@@ -683,7 +687,7 @@
   </div>
   <div class="hero-strip">
     <h1 style="font:inherit;margin:0">The Entrepreneurship Network — virtual internships &amp; portals</h1>
-    <span><a href="academics.html">ACADEMICS</a> / <a href="student-portal/">STUDIO</a> / <a href="/domains">DOMAINS</a> / <a href="https://ten-biz-game.tenetwork.workers.dev" target="_blank" rel="noopener noreferrer">PLAYGROUND</a></span>
+    <span><a href="academics.html">ACADEMICS</a> / <a href="student-portal/">STUDIO</a> / <a href="/domains">DOMAINS</a> / <a href="https://ten-biz-game.tenetwork.workers.dev" target="_blank" rel="noopener noreferrer">PLAYGROUND</a><span id="installWrap" hidden> / <button type="button" id="installApp" class="install-app">INSTALL APP</button></span></span>
   </div>
 </header>
 

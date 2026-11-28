@@ -1,9 +1,9 @@
 {
-  "name": "TEN Internship Portal",
+  "name": "TEN Portal",
   "short_name": "TEN",
-  "description": "Tasks, attendance, documents, certificates and messages for The Entrepreneurship Network internship programme.",
+  "description": "The Entrepreneurship Network in one app: internships, the Career Studio, job and resume portals, hackathons, and the founder, mentor and investor portals.",
   "id": "/student-dashboard",
-  "start_url": "/student-dashboard",
+  "start_url": "/app",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

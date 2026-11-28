@@ -324,6 +324,37 @@ loads.
   dashboard's onboarding buttons use `<span class="block">` where a `<div>`,
   `<h3>` or `<p>` would be invalid HTML.
 
+### 6.6 The app (the whole site, installable, free)
+
+- The whole site installs as one app, **TEN Portal**
+  (`public/manifest.webmanifest`). Every page links it except `offline.html`
+  and `notifications.html`, which is the separate "TEN Alerts" app. That
+  includes the four single-page portals, in source and build.
+- Android (Chrome) installs it as a real app in the app drawer: full screen,
+  with push notifications, and no Play Store needed. On desktop, Chrome and
+  Edge offer Install. On an iPhone it is Share → Add to Home Screen
+  (`/apple-touch-icon.png` is its icon).
+- It opens at **`/app`** (`routes/appStart.js`), which sends each signed-in
+  person to their own space: students to the dashboard, founders, mentors,
+  investors and contractors to theirs, coordinators, HR, admin, learners and
+  Growth to theirs. Anyone else goes to the home page.
+- The manifest `id` stays `/student-dashboard`, the id the first installs were
+  made under. Changing it does not rename the app: it creates a new one and
+  leaves every existing install without updates.
+- The home page has an **Install app** button in its link strip
+  (`public/install-app.js`). It appears only when the browser can actually
+  install, and on an iPhone it says how instead.
+- The service worker (`/sw.js`, registered by `push-client.js`) caches only
+  the icons, the manifests and `offline.html`. Bump `SHELL_CACHE` whenever
+  anything on that list changes, or installed copies keep the old file.
+- `tests/public/installableApp.test.js` and `tests/routes/appStart.test.js`
+  hold these rules.
+- **Google Play** is possible later at no running cost, but needs a Google Play
+  developer account (one-time US$25). Wrap the site with PWABuilder (free) as
+  a Trusted Web Activity, and serve its `/.well-known/assetlinks.json`. Note
+  that `express.static` hides dot-folders, so it needs a route. The Apple App
+  Store costs US$99 a year, and usually rejects plain website wrappers.
+
 ---
 
 ## 7. Features, area by area
