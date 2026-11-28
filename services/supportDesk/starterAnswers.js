@@ -470,5 +470,21 @@ module.exports = [
             '3. Check that each PDF is under 25 MB. A scanned marksheet can be large; a smaller scan uploads far more reliably.\n' +
             '4. If you have a laptop, try from there.\n\n' +
             'If it still fails, tell us the size of each file in MB, the network you used, and the exact message you see.'
+    },
+    {
+        key: 'task-rejected-repo-empty',
+        question: 'My task was rejected saying my GitHub repository is empty, but my code is there. What do I do?',
+        examples: [
+            'task rejected github repository is empty', 'feedback says my repo is empty but i uploaded the code',
+            'submission rejected repository does not contain source code', 'rejected saying no source code in github',
+            'my repo has all files but task got rejected', 'github repo empty error on task submission',
+            'task rejected missing configuration files but i uploaded them', 'why is my github submission rejected as empty'
+        ],
+        answer: 'Sometimes GitHub took a while to show a freshly pushed repository to our check, and a few submissions were ' +
+            'wrongly marked as empty. That has been fixed: a repository is now only called empty when it really has no ' +
+            'files, and if its files cannot be read at that moment, a coordinator looks at it instead.\n\n' +
+            'Please open the repository on GitHub while signed out (or in a private window) and check that it is public and ' +
+            'that your files are on its main branch, then submit the task again from My Tasks. If it is rejected again for ' +
+            'the same reason, reply to this email and a member of the team will look at it.'
     }
 ];

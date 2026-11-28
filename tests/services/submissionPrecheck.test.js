@@ -333,6 +333,33 @@ describe('GitHub', () => {
         expect(mockFetch.mock.calls[1][1].headers.Authorization).toBeUndefined();
     });
 
+    it('a repository pushed minutes ago, whose size GitHub still says is 0, is not called empty', async () => {
+        mockFetch.mockImplementation(async (url) => (
+            /\/contents$/.test(url) ? reply(200, [{ name: 'index.html', type: 'file' }, { name: 'package.json', type: 'file' }])
+                : /raw\.githubusercontent/.test(url) ? reply(404, '')
+                    : reply(200, { full_name: 'priya/landing', private: false, default_branch: 'main', size: 0 })));
+        const r = await precheck.githubRepo({ owner: 'priya', repo: 'landing' });
+        expect(r).toMatchObject({ public: true, empty: false, files: ['index.html', 'package.json'] });
+        expect(r.filesUnread).toBeUndefined();
+    });
+
+    it('a repository with no commits at all is empty', async () => {
+        mockFetch.mockImplementation(async (url) => (
+            /\/contents$/.test(url) ? reply(404, { message: 'This repository is empty.' })
+                : /raw\.githubusercontent/.test(url) ? reply(404, '')
+                    : reply(200, { full_name: 'priya/landing', private: false, size: 0 })));
+        expect(await precheck.githubRepo({ owner: 'priya', repo: 'landing' })).toMatchObject({ public: true, empty: true });
+    });
+
+    it('a file list GitHub would not give (its hourly limit) is "not read", never "empty"', async () => {
+        mockFetch.mockImplementation(async (url) => (
+            /\/contents$/.test(url) ? reply(403, {})
+                : /raw\.githubusercontent/.test(url) ? reply(404, '')
+                    : reply(200, { full_name: 'priya/landing', private: false, size: 0 })));
+        const r = await precheck.githubRepo({ owner: 'priya', repo: 'landing' });
+        expect(r).toMatchObject({ public: true, empty: false, filesUnread: true, files: [] });
+    });
+
     it("over GitHub's hourly limit, the repository is reported as not checked, not as private", async () => {
         mockFetch.mockResolvedValue(reply(403, {}));
         expect(await precheck.githubRepo({ owner: 'priya', repo: 'landing' })).toEqual({ unknown: "GitHub's hourly limit was reached" });
