@@ -4952,9 +4952,13 @@ async function reviewSubmission({ id, status, feedback, rating, from = "Coordina
     // Fire notification to the student
     const submission = await Submission.findById(id);
     if(submission){
+        // The task by name, and the feedback as the message itself: on a phone
+        // only the first line or two are read.
+        const taskName = String(submission.task || "").slice(0, 100);
+        const said = feedback && feedback !== "No Feedback Yet" ? String(feedback) : "";
         const notif = new Notification({
-            title: `Task ${status}`,
-            message: `Your task submission has been ${status.toLowerCase()}. Feedback: ${feedback || "No feedback provided"}`,
+            title: taskName ? `Task ${status}: ${taskName}` : `Task ${status}`,
+            message: said || `Your task submission has been ${status.toLowerCase()}.`,
             type: status === "Approved" ? "success" : "warning",
             from,
             targetType: "student",

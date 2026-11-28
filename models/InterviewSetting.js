@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 /*
  * Which AI runs the Interview Room (services/aiMeeting.js): one document,
  * _id "interview", changed from the admin portal's Interview Room section.
+ * The coordinator's submission reviews keep their own choice beside it,
+ * _id "coordinator" (services/aiCoordinator.js, "Coordinator AI").
  *
  *   engine            gemini (free) or claude (paid per interview);
  *   claudeModel       which Claude model, when engine is claude;

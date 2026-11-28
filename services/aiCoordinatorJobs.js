@@ -113,7 +113,7 @@ async function claim(key, student, source, kind = 'reminder') {
 /** A notification from the AI Coordinator: portal and phone, and email when `email`. */
 async function notify(student, { title, message, email }) {
     const note = new Notification({
-        title, message, type: 'info', from: ai.NAME,
+        title, message, type: 'info', from: ai.SENDER,
         targetType: 'student', targetEmployeeId: student.employeeId, targetDomain: student.domain || ''
     });
     if (!email) note.$locals.skipEmail = true;
@@ -371,9 +371,12 @@ function attach({ review, certificate } = {}) {
 
 /**
  * What the AI does with a pre-checked submission. Approved only when every
- * check passed, Gemini read it and did not say the work is something else;
- * asked for changes when a check failed or Gemini said it is not the task;
- * otherwise nothing, and it waits for a person (the report names it).
+ * check passed, the AI read it, and it neither said the work is something
+ * else nor asked for changes; asked for changes when a check failed or the AI
+ * asked for them; otherwise nothing, and it waits for a person (the report
+ * names it). The AI wrote its feedback for its own decision, so the status
+ * follows that decision: an approval never carries "change this and submit it
+ * again".
  *
  *   { status: 'Approved' | 'Rejected', feedback } or { wait: why }
  */
@@ -381,9 +384,9 @@ function decide(check) {
     if (!check) return { wait: 'no pre-check yet' };
     if (check.problems && check.problems.length) return { status: 'Rejected', feedback: check.draft };
     if (check.by !== 'ai') return { wait: 'Gemini did not read it' };
-    if (check.match === 'no') return { status: 'Rejected', feedback: check.draft };
     const opened = (check.link && check.link.verdict === 'opens') || (check.repo && check.repo.public && !check.repo.empty);
     if (!opened) return { wait: 'the link could not be checked' };
+    if (check.match === 'no' || check.decision === 'changes') return { status: 'Rejected', feedback: check.draft };
     return { status: 'Approved', feedback: check.draft };
 }
 
@@ -396,7 +399,7 @@ function decide(check) {
 async function applyDecision(sub, check) {
     const d = decide(check);
     if (!d.status) return { wait: d.wait };
-    const r = await reviewFn({ id: sub._id, status: d.status, feedback: d.feedback, from: ai.NAME, reviewedBy: 'ai' });
+    const r = await reviewFn({ id: sub._id, status: d.status, feedback: d.feedback, from: ai.SENDER, reviewedBy: 'ai' });
     if (!(r && r.success)) {
         if (r && r.alreadyReviewed) return { already: true };
         console.error('[ai-coordinator] review not saved:', (r && r.message) || 'no answer');
@@ -447,7 +450,9 @@ async function reviewBacklog() {
         console.log(`[ai-coordinator] backlog: ${subs.length} waiting submission(s), ${recent.length} within ${REVIEW_DAYS} days.`);
 
         let budgetOut = false;
-        const fresh = (c) => c && c.at && (Date.now() - new Date(c.at)) < FRESH_MS && c.by === 'ai';
+        // A check without `engine` was written before the feedback became the
+        // review itself, and may promise a follow-up: it is made again.
+        const fresh = (c) => c && c.at && (Date.now() - new Date(c.at)) < FRESH_MS && c.by === 'ai' && !!c.engine;
         for (const sub of recent.concat(older)) {
             if (!ai.enabled() || mongoose.connection.readyState !== 1) { out.stopped = ai.enabled() ? 'the database went away' : 'switched off'; break; }
             let check = fresh(sub.aiCheck) ? sub.aiCheck : null;
@@ -515,9 +520,9 @@ async function approveCertificates(now = new Date()) {
         }
         const facts = `attendance ${c.attendance}%, ${c.approvedTasks} tasks approved, internship ended ${istDateKey(end)}`;
         await certFns.approve(s, {
-            approver: ai.NAME, from: ai.NAME,
+            approver: ai.NAME, from: ai.SENDER,
             remarks: `Approved by the AI Coordinator: ${facts}.`,
-            message: `The AI Coordinator approved you for certificate consideration: ${facts}. HR gives the final approval.`
+            message: `You're approved for certificate consideration: ${facts}. HR gives the final approval.`
         });
         out.approved += 1;
         await AiCoordinatorLog.create({

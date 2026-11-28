@@ -50,6 +50,7 @@ jest.mock('../../models/MailHistory', () => ({
 }));
 jest.mock('../../services/aiCoordinator', () => ({
     NAME: 'TEN AI Coordinator',
+    SENDER: 'TEN Coordinator Team',
     enabled: () => !/^off$/i.test(process.env.AI_COORDINATOR || ''),
     scrub: (s) => String(s).replace(/[^\s@]+@[^\s@]+/g, '[address]').replace(/\b[6-9]\d{9}\b/g, '[phone]'),
     HANDOVER_LABEL: { money: 'money', marks: 'marks or a review' }
@@ -61,7 +62,7 @@ jest.mock('../../services/submissionPrecheck', () => ({
         mockState.runs.push({ id: String(id), opts });
         const sub = mockState.submissions.find((s) => s._id === String(id));
         if (!sub || sub.reviewedOnce) return null;
-        const check = Object.assign({ at: new Date(), by: 'ai', match: 'yes', problems: [], draft: 'Good work.', link: { verdict: 'opens' }, repo: null },
+        const check = Object.assign({ at: new Date(), by: 'ai', engine: 'gemini', match: 'yes', problems: [], draft: 'Good work.', link: { verdict: 'opens' }, repo: null },
             mockState.checks[sub._id] || {});
         sub.aiCheck = check;
         mockState.logs.push({ kind: 'precheck', employeeId: sub.employeeId, question: sub.task, source: check.problems.length ? 'changes' : 'approve', reply: check.problems.join(' '), createdAt: new Date() });
@@ -100,7 +101,7 @@ const sub = (id, extra) => Object.assign({
     status: 'Pending', reviewedOnce: false, aiCheck: null, githubLink: 'https://site.example.in', image: '',
     submittedAt: ago(10)
 }, extra);
-const freshCheck = (extra) => Object.assign({ at: new Date(Date.now() - 3600 * 1000), by: 'ai', match: 'yes', problems: [], draft: 'Good work.', link: { verdict: 'opens' }, repo: null }, extra);
+const freshCheck = (extra) => Object.assign({ at: new Date(Date.now() - 3600 * 1000), by: 'ai', engine: 'gemini', match: 'yes', problems: [], draft: 'Good work.', link: { verdict: 'opens' }, repo: null }, extra);
 // Undoes quoted-printable soft breaks and header folding.
 const unfold = (mail) => mail.replace(/=\r?\n/g, '').replace(/\r?\n[ \t]+/g, ' ');
 
@@ -134,6 +135,10 @@ describe('the decision on a pre-checked submission', () => {
             .toEqual({ status: 'Rejected', feedback: 'Fix: make it public.' });
         expect(decide(check({ match: 'no', draft: 'This is not the landing page task.' })))
             .toEqual({ status: 'Rejected', feedback: 'This is not the landing page task.' });
+        // Its feedback asks for changes, so the status does too: never "Approved" with "add this and submit it again".
+        expect(decide(check({ match: 'partly', decision: 'changes', draft: 'Add the contact form, then submit it again.' })))
+            .toEqual({ status: 'Rejected', feedback: 'Add the contact form, then submit it again.' });
+        expect(decide(check({ match: 'partly', decision: 'approve' }))).toEqual({ status: 'Approved', feedback: 'Nice.' });
     });
 
     it('waits for a person otherwise, and never decides without Gemini', () => {
@@ -171,7 +176,8 @@ describe('the review of the waiting submissions', () => {
 
         // Every decision went through the coordinator's own review function, as the AI's.
         expect(review.mock.calls.map((c) => [String(c[0].id), c[0].status])).toEqual([['s1', 'Approved'], ['s2', 'Approved'], ['s3', 'Rejected'], ['s8', 'Approved']]);
-        expect(review.mock.calls.every((c) => c[0].from === 'TEN AI Coordinator' && c[0].reviewedBy === 'ai')).toBe(true);
+        // Signed as the coordinator team, never as a person.
+        expect(review.mock.calls.every((c) => c[0].from === 'TEN Coordinator Team' && c[0].reviewedBy === 'ai')).toBe(true);
         const s3 = mockState.submissions.find((s) => s._id === 's3');
         expect(s3).toMatchObject({ status: 'Rejected', reviewedOnce: true, reviewedBy: 'ai', feedback: 'Before it can be approved: make it public.' });
         for (const id of ['s4', 's5', 's6']) expect(mockState.submissions.find((s) => s._id === id)).toMatchObject({ status: 'Pending', reviewedOnce: false });
@@ -225,6 +231,13 @@ describe('the review of the waiting submissions', () => {
         expect(out).toMatchObject({ checked: 1, approved: 0, changes: 0, left: 2 });
     });
 
+    it('a fresh check written before the feedback became the review itself is made again, never sent', async () => {
+        mockState.submissions = [sub('s1', { aiCheck: freshCheck({ engine: undefined, draft: "Thanks! I'll check it from my side and message you." }) })];
+        await jobs.reviewBacklog();
+        expect(mockState.runs.map((r) => r.id)).toEqual(['s1']);
+        expect(review.mock.calls.map((c) => c[0].feedback)).toEqual(['Good work.']);
+    });
+
     it('a submission a person reviewed in the meantime is left as theirs', async () => {
         mockState.submissions = [sub('s1', { aiCheck: freshCheck() })];
         review.mockImplementationOnce(async () => ({ success: false, alreadyReviewed: true }));
@@ -274,7 +287,8 @@ describe('the certificate approvals', () => {
         expect(mockState.certs.map((c) => c.employeeId)).toEqual(['TEN/WEB/2001']);
         const { opts } = mockState.certs[0];
         expect(opts.approver).toBe('TEN AI Coordinator');
-        expect(opts.from).toBe('TEN AI Coordinator');
+        expect(opts.from).toBe('TEN Coordinator Team');
+        expect(opts.message).toMatch(/^You're approved for certificate consideration: attendance 82%/);
         expect(opts.remarks).toMatch(/^Approved by the AI Coordinator: attendance 82%, 6 tasks approved, internship ended \d{4}-\d{2}-\d{2}\.$/);
         expect(opts.message).toContain('HR gives the final approval');
         // Criteria are only computed for those who finished and were not returned.

@@ -966,7 +966,9 @@ in the background: `services/submissionPrecheck.js` (submissions),
 the coordinators' summary and the daily report), `routes/v2/aiCoordinator.js`,
 and the Interview Room (§7.15). `services/aiCoordinator.js` holds the shared
 helpers: the switch, the student's record, the domain's coordinators and the
-scrubber. It costs nothing: Gemini's free tier and the portal's own SMTP.
+scrubber. It costs nothing on Gemini, the default (free tier), and the
+portal's own SMTP; Claude, if the admin portal picks it for reviews, is paid
+and capped a month (below).
 **`AI_COORDINATOR=off` switches all of it off**, including the Interview
 Room's dashboard entries. Old conversations with `ten-ai` (kept 30 days) are
 hidden from Messages.
@@ -977,17 +979,30 @@ hidden from Messages.
   owner, which redirects to a sign-in. The server never opens private or
   internal addresses, on any redirect hop. For a GitHub link, it also checks
   whether the repository is public and not empty, with its language,
-  top-level files and README. It checks the screenshot, then asks Gemini
-  whether the work fits the task and to draft feedback. A failed check is
-  always "ask for changes", whatever Gemini says, and if Gemini would have
-  approved it, the draft comes from the checks (what to fix) instead of its
-  praise. Work nobody could open is never said to match the task.
+  top-level files and README. It checks the screenshot, then asks the AI
+  (Gemini, or Claude when picked, below) whether the work fits the task and
+  for the feedback. **That feedback is the review the intern receives, and
+  nothing follows it.** It used to be asked for as "a draft the coordinator
+  could send", so it promised a coordinator's next step ("I'll go through your
+  GitHub link and check it from my side… I will send you a message"), and
+  interns waited for a message that never came. The prompt now says it is the
+  review itself: specific to the work, warm, saying what works or exactly
+  what to change, with no promise of a later step, no talk of checks, tools
+  or AI, and never claiming to be a person. `withoutPromises()` in
+  `services/submissionPrecheck.js` also removes any sentence that still
+  promises a check, a review or a message; an answer left empty by that, or
+  one that says "not this task" while approving it, counts as no answer and
+  waits for a person. A failed check is always "ask for changes", whatever
+  the AI says, and if it would have approved it, the feedback comes from the
+  checks (what to fix) instead of its praise. Work nobody could open is never
+  said to match the task.
   - The result is `Submission.aiCheck`. The coordinator's card shows it, with
     the draft already in the feedback box: approving is the existing Approve
     button. Clear cases the AI reviews itself (below). **Re-check** runs it again (`POST
     /api/v2/ai-coordinator/precheck/:id`).
-  - The student's card shows a line marked as the AI's, and a portal and
-    phone notice (no email) when something needs fixing.
+  - While it waits, the intern's card shows the automatic check's result
+    ("Automatic check: …"), with a portal and phone notice (no email) when
+    something needs fixing.
   - The pre-check itself never writes `feedback` or `status`. The step it
     replaced wrote Gemini's text into `feedback`, where the student saw it as
     "COORDINATOR FEEDBACK".
@@ -997,18 +1012,29 @@ hidden from Messages.
     asks without it.
   - **The review of waiting submissions** (`reviewBacklog`, a minute after
     every start, 02:05 and 08:35 IST). Every waiting submission, oldest first:
-    a pre-check where none is fresh (under 24 hours, by Gemini), then, for
+    a pre-check where none is fresh (under 24 hours, by the AI, and written
+    after the feedback became the review itself: one without `engine` is
+    made again), then, for
     those handed in within the last 60 days, the AI's own decision through
     `reviewSubmission()` in `server.js`, the same function as the Approve
     button, so the student's notice, the Task Journey, milestones, the
     certificate check and badges happen the same way. `reviewedBy: "ai"`
-    marks it, and both dashboards label it.
-    - Approved: every check passed, Gemini read it (`by: "ai"`) and did not
-      say the work is something else, and the link opened or the repository
-      is public and not empty. Feedback is the AI's draft.
+    marks it. The intern's card reads "COORDINATOR FEEDBACK" with a small
+    **"AI-assisted"** tag; the coordinator's card says "Reviewed
+    automatically: approved" or "changes asked". The intern's notice is
+    "Task Approved: <task>" (or Rejected) with the feedback as the message,
+    the same shape as a coordinator's own review. Messages to interns come
+    from **"TEN Coordinator Team"** (`SENDER` in `services/aiCoordinator.js`);
+    it never signs as a person or says it is one. `NAME` ("TEN AI
+    Coordinator") stays where staff read it: the approver on a certificate,
+    the coordinators' summaries.
+    - Approved: every check passed, the AI read it (`by: "ai"`) and neither
+      said the work is something else nor asked for changes, and the link
+      opened or the repository is public and not empty. Feedback is the AI's.
     - Asked for changes (`Rejected`, which the student can resubmit): a check
-      failed, or Gemini said the work is not the task. Feedback says what to
-      fix.
+      failed, or the AI said the work is not the task or asked for changes.
+      The status follows the AI's own decision, so an approval never carries
+      "add this and submit it again". Feedback says what to fix.
     - Otherwise it waits for a person and is tried again next run: no
       pre-check, Gemini did not read it, or the link could not be checked.
       Older than 60 days: pre-checked, never decided. The daily report counts
@@ -1036,6 +1062,21 @@ hidden from Messages.
       check costs nothing. A student's own hand-in is checked whatever the
       count. **`AI_COORDINATOR_REVIEW=off`** keeps the pre-checks and leaves
       every decision to a person.
+- **Which AI reviews (admin portal, "Coordinator AI"):** Gemini (free, the
+  default) or Claude (paid), stored in `models/InterviewSetting.js` beside the
+  Interview Room's (`_id: "coordinator"`), read and saved through `GET/POST
+  /api/admin-internal/coordinator-ai` (`engineSummary()`, `saveEngine()`,
+  `askReviewer()` in `services/aiCoordinator.js`). Claude runs through
+  `utils/claude.js` and needs `ANTHROPIC_API_KEY`. Each model is shown with
+  its cost per review (estimates in `REVIEW_COST_INR`: about 2,000 tokens in
+  and 800 out; Haiku 5.5 about ₹0.10, Sonnet 5.5 about ₹1.20, Opus 5.5 about
+  ₹2.50), and a **monthly limit on Claude reviews** (default 500, so at most
+  about ₹600 a month on Sonnet) is counted from `AiCoordinatorLog`
+  (`kind: "precheck"`, `engine: "claude"`). Past it, without the key, or when
+  Claude fails on a submission, Gemini reviews; a count that cannot be read
+  counts as the limit reached. Anthropic's console shows the real spend.
+  Check it against the ₹3,000 ceiling together with the Interview Room's
+  Claude limit.
 - **Reminders** (10:05 IST):
   - every day, to students away 3 to 13 days: portal, phone and email (not
     for `emailOptOut`). At most 300 a day; the rest wait for the next day.

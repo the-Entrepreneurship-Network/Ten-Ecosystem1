@@ -59,6 +59,7 @@ jest.mock('../../utils/mailer', () => Object.assign({}, jest.requireActual('../.
 }));
 jest.mock('../../services/aiCoordinator', () => ({
     NAME: 'TEN AI Coordinator',
+    SENDER: 'TEN Coordinator Team',
     enabled: () => !/^off$/i.test(process.env.AI_COORDINATOR || ''),
     HANDOVER_LABEL: { money: 'money', personal: 'a personal matter' },
     progressOf: async (s) => mockState.progress[s.employeeId] || { total: 0, approved: 0, week: null, current: [], approvedAt: [] },
@@ -111,7 +112,7 @@ describe('the sign-in reminder', () => {
         const to = mockState.notes.map((n) => n.targetEmployeeId);
         expect(to).toEqual(['TEN/WEB/1001', 'TEN/WEB/1004']);
         const first = mockState.notes[0];
-        expect(first).toMatchObject({ title: "You haven't signed in for 5 days", from: 'TEN AI Coordinator', targetType: 'student' });
+        expect(first).toMatchObject({ title: "You haven't signed in for 5 days", from: 'TEN Coordinator Team', targetType: 'student' });
         expect(first.message).toMatch(/yours is \d+% so far/);
         expect(first.$locals.skipEmail).toBeUndefined();
         expect(mockState.notes[1].$locals.skipEmail).toBe(true);

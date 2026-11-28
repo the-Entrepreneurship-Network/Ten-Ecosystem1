@@ -1,13 +1,14 @@
 'use strict';
 
 /**
- * Claude, through Anthropic's API, for the Interview Room when the admin
- * portal picks it (services/aiMeeting.js). ask() mirrors utils/gemini.js:
- * a prompt and a JSON schema in, the parsed object out.
+ * Claude, through Anthropic's API, for the Interview Room and the
+ * coordinator's submission reviews when the admin portal picks it
+ * (services/aiMeeting.js, services/aiCoordinator.js). ask() mirrors
+ * utils/gemini.js: a prompt and a JSON schema in, the parsed object out.
  *
  * Needs ANTHROPIC_API_KEY in .env. Paid per token, unlike Gemini's free tier:
- * the admin portal shows the cost per interview of each model and caps the
- * Claude interviews a month.
+ * the admin portal shows the cost of each model and caps the Claude
+ * interviews and reviews a month.
  */
 const Anthropic = require('@anthropic-ai/sdk');
 
