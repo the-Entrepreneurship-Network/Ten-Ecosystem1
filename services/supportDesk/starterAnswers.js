@@ -376,11 +376,16 @@ module.exports = [
         question: 'How do I contact my coordinator or HR?',
         examples: [
             'how to contact my coordinator', 'who is my coordinator', 'coordinator phone number', 'how to talk to hr',
-            'contact hr', 'coordinator se baat kaise kare'
+            'contact hr', 'coordinator se baat kaise kare',
+            'i cannot find the my coordinator card', 'my coordinator card is not visible on my dashboard',
+            'where is the my coordinator section', 'coordinator details not showing on dashboard',
+            'cannot find coordinator contact details', 'please provide my coordinator contact details',
+            'no reply in domain chat how else can i contact my coordinator'
         ],
         answer: 'On your dashboard:\n' +
-            '• The "My Coordinator" card shows your coordinator\'s name, email and WhatsApp number, with a "Message ' +
-            'Coordinator" button.\n' +
+            '• Open 🏆 Extras & Badges (Leaderboard & Badges in the menu). The "My Coordinator" card there shows your ' +
+            'coordinator\'s name, email and WhatsApp number, with a "Message Coordinator" button. If it says your ' +
+            'coordinator is not yet assigned, write to HR in General Chat or Messages.\n' +
             '• The chat buttons at the bottom right open your Domain Chat (your coordinator and domain) and General Chat (HR).\n' +
             '• Messages, in the sidebar, lets you write privately to a coordinator or to HR.'
     },
@@ -396,8 +401,8 @@ module.exports = [
         answer: 'Your offer letter confirms a position as an intern at The Entrepreneurship Network (TEN), in the ' +
             'Domain shown in the box on the letter. On your resume and LinkedIn, use "<your Domain> Intern" at The ' +
             'Entrepreneurship Network (TEN), with the Domain written exactly as on your letter.\n\n' +
-            'Your mentor and point of contact is your domain coordinator: the "My Coordinator" card on your dashboard ' +
-            'shows their name, email and WhatsApp number.\n\n' +
+            'Your mentor and point of contact is your domain coordinator: the "My Coordinator" card, under 🏆 Extras & Badges on your ' +
+            'dashboard, shows their name, email and WhatsApp number.\n\n' +
             'Your team is your domain group. Open Guidelines, then Communication & Support, on the dashboard to join ' +
             "your domain's WhatsApp group. Your weekly tasks are in 🪙 Task Journey, and tasks your coordinator posts " +
             'are under My Tasks.'
@@ -454,7 +459,7 @@ module.exports = [
         answer: 'WhatsApp limits how many people a group or community can hold, and that one has reached the limit. ' +
             'It is a WhatsApp limit, not a problem with your account or with the portal.\n\n' +
             'Please ask your coordinator for the link to the new group for your domain, and join with that. ' +
-            'Until then you can reach your coordinator from the "My Coordinator" card on your dashboard.'
+            'Until then you can reach your coordinator from the "My Coordinator" card, under 🏆 Extras & Badges on your dashboard.'
     },
     {
         key: 'course-videos',
