@@ -472,6 +472,30 @@ export function AgentChat() {
   /* "Match a job description": the text being typed, and the one last checked. */
   const [jdDraft, setJdDraft] = useState('');
   const [jdChecked, setJdChecked] = useState('');
+  /* The jobs this student applied to from here, as the shared tracker has them. */
+  const [appliedTo, setAppliedTo] = useState<string[]>([]);
+
+  /* A job handed over by the job portal ("Tailor my resume"): opened at once,
+     and kept open — the student came for this job, not for a new list. */
+  const handedJob = useRef(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('ten_handoff_job');
+      localStorage.removeItem('ten_handoff_job');
+      const job = raw ? JSON.parse(raw) : null;
+      if (job && job.title && job.url) { handedJob.current = true; setOpenJob(job); setTab('jobs'); setShowTailored(false); setPhoneView('pane'); }
+    } catch { /* nothing handed over */ }
+  }, []);
+
+  /* "Apply": the posting opens, and the shared tracker records the application. */
+  const apply = (job: Job) => {
+    window.open(job.url, '_blank', 'noopener');
+    setAppliedTo((list) => [...list, job.url]);
+    fetch(`${API}/tracker`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: job.url, company: job.company, role: job.title, status: 'applied' }),
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -597,7 +621,7 @@ export function AgentChat() {
         setMsgs((m) => [...m, { role: 'agent', report: data.report, text: data.prompt || undefined }]);
         /* A resume arriving is the start of a search, not the end of one:
            scanning it is what the hunt is built from. */
-        if (data.session && String(data.session.resumeText || '').trim() && !jobs.length) {
+        if (data.session && String(data.session.resumeText || '').trim() && !jobs.length && !handedJob.current) {
           setTimeout(() => send('find me jobs'), 400);
         }
       } else if (data.kind === 'build') {
@@ -723,6 +747,11 @@ export function AgentChat() {
               <p className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
                 {tab === 'jobs' ? (showTailored ? docName : 'Resume builder') : 'Cover letter'}
               </p>
+              {latestResume && (
+                /* The same resume, hunted on the job portal. */
+                <button onClick={() => { try { localStorage.setItem('ten_handoff_resume', latestResume); } catch { /* blocked */ } window.location.href = '/job-portal/#agent'; }}
+                  className="rounded-lg border border-[#d1d5db] px-2.5 py-1 text-[11px] font-semibold text-[#374151] hover:bg-[#f3f4f6]">Find jobs for this resume ↗</button>
+              )}
               {tab === 'jobs' && showTailored && latestResume && (
                 <>
                   <button onClick={() => navigator.clipboard?.writeText(latestResume)}
@@ -756,7 +785,7 @@ export function AgentChat() {
                   /* ── the role, before anything is rewritten ── */
                   <div className="mx-auto max-w-[760px]">
                     <div className="mb-2.5 flex items-center gap-1.5 text-[12px]">
-                      <button onClick={() => setOpenJob(null)} className="text-[#6b7280] hover:text-[#111827]">
+                      <button onClick={() => { handedJob.current = false; setOpenJob(null); }} className="text-[#6b7280] hover:text-[#111827]">
                         Job Search
                       </button>
                       <span className="text-[#9ca3af]">/</span>
@@ -768,6 +797,8 @@ export function AgentChat() {
                     <JobPosting
                       job={openJob}
                       busy={busy}
+                      onApply={() => apply(openJob)}
+                      applied={appliedTo.includes(openJob.url)}
                       /* Starts the conversation, not the rewrite: the agent
                          asks before it changes the page you are working on. */
                       onTailor={() => send(`I want to tailor my resume for the ${openJob.title} role at ${openJob.company}`)}

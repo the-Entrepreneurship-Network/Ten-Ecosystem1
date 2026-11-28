@@ -2742,6 +2742,16 @@ if (process.env.JOB_COLLECTOR_CRON !== 'off'
     }, 3 * 60 * 1000).unref();
 }
 
+// Career Studio nudges, daily at 09:43: a follow-up that is due on an
+// application, and new openings that fit what a student hunted for. Phone and
+// portal only; email just for the weekly digest a student switched on.
+// CAREER_ALERTS_CRON=off turns it off. Worker 0 only, as for the other jobs.
+if (process.env.CAREER_ALERTS_CRON !== 'off'
+    && (process.env.NODE_APP_INSTANCE === undefined || process.env.NODE_APP_INSTANCE === '0')) {
+    cron.schedule('43 9 * * *', () => require('./services/v2/careerAlerts').runDaily()
+        .catch((err) => console.error('[career-alerts]', err.message)));
+}
+
 // ======= AUTO DOCUMENT EMAIL HELPERS =======
 function tenureToDays(tenure) {
     if (!tenure) return 30;

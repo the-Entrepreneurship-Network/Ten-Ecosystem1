@@ -22,8 +22,8 @@ const SECTION = /^(about( the| this)? (role|job|position|team|us|company)|the ro
 
 const BULLET = /^\s*[•\-*·▪]\s+/;
 
-export function JobPosting({ job, onTailor, busy }: {
-  job: Job; onTailor: () => void; busy?: boolean;
+export function JobPosting({ job, onTailor, busy, onApply, applied }: {
+  job: Job; onTailor: () => void; busy?: boolean; onApply?: () => void; applied?: boolean;
 }) {
   const lines = String(job.description || '').split('\n').map((l) => l.trim()).filter(Boolean);
 
@@ -37,13 +37,22 @@ export function JobPosting({ job, onTailor, busy }: {
           <p className="mt-1 text-[13px] text-[#374151]">{job.company}</p>
           {job.location && <p className="mt-0.5 text-[12.5px] text-[#6b7280]">{job.location}</p>}
         </div>
-        <button
-          onClick={onTailor}
-          disabled={busy}
-          className="shrink-0 rounded-lg bg-[#2563eb] px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wide text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
-        >
-          Tailor resume
-        </button>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <button
+            onClick={onTailor}
+            disabled={busy}
+            className="rounded-lg bg-[#2563eb] px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wide text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
+          >
+            Tailor resume
+          </button>
+          {onApply && (
+            /* Opens the posting, and the tracker shared with the job portal records it. */
+            <button onClick={onApply}
+              className="rounded-lg border border-[#d1d5db] px-4 py-1.5 text-[11.5px] font-semibold text-[#374151] hover:bg-[#f3f4f6]">
+              {applied ? 'Applied ✓ — in your tracker' : 'Apply ↗'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="px-6 py-5">
