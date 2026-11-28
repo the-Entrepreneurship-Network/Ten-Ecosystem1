@@ -98,10 +98,15 @@ module.exports = [
         question: "I can't log in to the portal",
         examples: [
             "i can't login", 'unable to login', 'login not working', 'how to login to the student portal',
-            'invalid employee id error', 'login nahi ho raha', 'which id should i use to login', 'my account is locked', 'login page link'
+            'invalid employee id error', 'login nahi ho raha', 'which id should i use to login', 'my account is locked', 'login page link',
+            'access denied invalid employee id', 'sign in says invalid employee id', 'my employee id shows invalid',
+            'dashboard login says access denied', 'employee id not accepted at sign in', 'getting access denied when i sign in'
         ],
         answer: 'Sign in at {{loginUrl}} with your email address or your Employee ID (for example TEN/WEB/1005), and the ' +
             'password you chose when you registered. Your Member ID (TEN-STU-…) does not work for signing in.\n\n' +
+            'If it says "Invalid Employee ID", no account has the ID you typed: check it against your welcome email, ' +
+            'or sign in with the email address you registered with instead. If you have more than one email address, ' +
+            'try each one.\n\n' +
             'After 5 wrong passwords the account locks for 15 minutes, so wait a little and try again. If you have ' +
             'forgotten your password, use "Forgot password?" on the sign-in page.',
         personal: 'Sign in at {{loginUrl}} with this email address or your Employee ID, {{employeeId}}, and the password ' +
