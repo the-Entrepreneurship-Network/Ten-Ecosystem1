@@ -965,6 +965,21 @@ button:active { transform: translateY(0); }
   align-items: center;
   gap: 10px;
 }
+/* "Install app", under the welcome line: shown by /install-app.js only where
+   the browser can install the portal, and gone once it is installed. Not in
+   the top bar, which on a phone is one sideways-scrolling strip
+   (css/mobile.css): there it would push Logout off the screen. On an iPhone
+   it becomes the longer "Tap Share…" hint, so it may wrap. */
+.install-appbtn {
+  min-height: 42px; padding: 8px 14px;
+  background: rgba(212,175,55,0.1);
+  border: 1px solid rgba(212,175,55,0.3);
+  border-radius: 12px; cursor: pointer;
+  color: #D4AF37; font-family: inherit;
+  font-size: 12.5px; font-weight: 700; text-align: center;
+  transition: background 0.2s;
+}
+.install-appbtn:hover { background: rgba(212,175,55,0.2); }
 .hamburger-btn {
   display: flex;
   align-items: center;
@@ -1464,6 +1479,7 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
   <script src="/mobile-nav.js" defer></script>
   <script src="/js/premium-chrome.js" defer></script>
   <script src="/push-client.js" defer></script>
+  <script src="/install-app.js" defer></script>
 </head>
 
 <body>
@@ -1560,6 +1576,7 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
   <div id="sectionCardGrid">
     <h1 class="section-cards-heading">Welcome, <span id="welcomeNameInline">Student</span> 🚀</h1>
     <p class="section-cards-sub" style="margin-bottom: 12px;">Select a section to get started</p>
+    <div id="installWrap" hidden style="margin-bottom: 16px;"><button type="button" id="installApp" class="install-appbtn">📲 Install app</button></div>
     
     <!-- Unified Front-page Domain Toggle — shown only if 2 domains -->
     <div id="mainDomainToggleWrap"
