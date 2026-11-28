@@ -2720,6 +2720,24 @@ cron.schedule('0 9 * * 1', runActivityMailer);
 // SUPPORT_AGENT_MODE is draft or send and the mailbox is connected. Never throws.
 cron.schedule('*/2 * * * *', () => { require('./services/supportDesk/agent').runOnce(); });
 
+// The job collector (routes/v2/jobAgent.js#collectOnce): every 6 hours at :17,
+// so a Job Portal search reads checked, stored openings instead of waiting on
+// the boards. Also once, 3 minutes after start, when fewer than 50 are stored,
+// so a new server has stock without every deploy spending the API allowance.
+// JOB_COLLECTOR_CRON=off turns it off. Worker 0 only, as for the other jobs:
+// under PM2 cluster mode each worker would otherwise collect the same boards.
+if (process.env.JOB_COLLECTOR_CRON !== 'off'
+    && (process.env.NODE_APP_INSTANCE === undefined || process.env.NODE_APP_INSTANCE === '0')) {
+    const collectJobs = () => require('./routes/v2/jobAgent').collectOnce()
+        .catch((err) => console.error('[job-collector]', err.message));
+    cron.schedule('17 */6 * * *', collectJobs);
+    setTimeout(() => {
+        require('./models/JobOpening').estimatedDocumentCount()
+            .then((n) => { if (n < 50) collectJobs(); })
+            .catch(() => {});
+    }, 3 * 60 * 1000).unref();
+}
+
 // ======= AUTO DOCUMENT EMAIL HELPERS =======
 function tenureToDays(tenure) {
     if (!tenure) return 30;
