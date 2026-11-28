@@ -71,7 +71,7 @@ describe('which addresses the server will open', () => {
 describe('reading the link', () => {
     it('finds GitHub repositories and profiles', () => {
         expect(precheck.parseGitHub('https://github.com/priya/landing-page.git')).toEqual({ owner: 'priya', repo: 'landing-page' });
-        expect(precheck.parseGitHub('github.com/priya/landing-page/tree/main/src')).toEqual({ owner: 'priya', repo: 'landing-page' });
+        expect(precheck.parseGitHub('github.com/priya/landing-page/tree/main/src')).toEqual({ owner: 'priya', repo: 'landing-page', path: 'src' });
         expect(precheck.parseGitHub('https://github.com/priya')).toEqual({ owner: 'priya' });
         expect(precheck.parseGitHub('https://gitlab.com/priya/x')).toBeNull();
     });
@@ -159,12 +159,11 @@ describe('checking a submission', () => {
     const add = (id, row) => mockSubs.set(id, Object.assign({ _id: id, employeeId: 'TEN/WEB/1005', domain: 'Web Development', task: 'Week 1: Landing page', status: 'Pending', reviewedOnce: false, feedback: 'No Feedback Yet' }, row));
 
     it('a private repository and no screenshot: both said, the student told in the portal only, nothing approved', async () => {
-        precheck.checkLink = async () => ({ url: 'https://github.com/priya/landing', verdict: 'broken', status: 404, error: 'is not there (404)' });
+        precheck.checkLink = async () => { throw new Error('a GitHub repository is not opened as a page'); };
         precheck.githubRepo = async () => ({ public: false });
         add('s1', { githubLink: 'https://github.com/priya/landing', note: 'done' });
         const c = await precheck.run('s1');
         expect(c.problems).toEqual([
-            'The link does not open: it is not there (404).',
             'The GitHub repository is private or does not exist. Make it public.',
             'No screenshot is attached.'
         ]);
@@ -307,35 +306,58 @@ describe('the feedback promises nothing', () => {
 
 describe('GitHub', () => {
     const reply = (status, body) => ({ status, ok: status >= 200 && status < 300, json: async () => body, text: async () => String(body) });
+    const tree = (...paths) => reply(200, { tree: paths.map((p) => ({ path: p, type: 'blob' })) });
+    // What git answers for a public repository with one branch, as GitHub sends it.
+    const REFS = '001e# service=git-upload-pack\n0000015b7fd1 HEAD\0multi_ack symref=HEAD:refs/heads/main agent=git/github\n003f7fd1 refs/heads/main\n0000';
+    const EMPTY_REFS = '001e# service=git-upload-pack\n0000 capabilities^{}\0multi_ack agent=git/github\n0000';
+    const isGit = (url) => /\.git\/info\/refs/.test(url);
     afterEach(() => { mockFetch.mockReset(); delete process.env.GITHUB_TOKEN; });
 
-    it('reads a public repository: name, language, top-level files and the README', async () => {
+    it('reads a public repository: name, language, every file and the README', async () => {
         mockFetch.mockImplementation(async (url) => (
-            /\/contents$/.test(url) ? reply(200, [{ name: 'index.html', type: 'file' }, { name: 'css', type: 'dir' }])
+            /\/git\/trees\/main\?recursive=1$/.test(url) ? tree('index.html', 'css/style.css')
                 : /raw\.githubusercontent/.test(url) ? reply(200, '# My landing page')
                     : reply(200, { full_name: 'priya/landing', private: false, language: 'HTML', default_branch: 'main', size: 12 })));
         const r = await precheck.githubRepo({ owner: 'priya', repo: 'landing' });
-        expect(r).toMatchObject({ public: true, fullName: 'priya/landing', language: 'HTML', files: ['index.html', 'css/'], readme: '# My landing page' });
+        expect(r).toMatchObject({ public: true, fullName: 'priya/landing', language: 'HTML', files: ['index.html', 'css/style.css'], readme: '# My landing page' });
     });
 
-    it('a private or missing repository reads as not public', async () => {
-        mockFetch.mockResolvedValue(reply(404, {}));
+    it('work in a subfolder is seen, and the folder the link points at comes first', async () => {
+        mockFetch.mockImplementation(async (url) => (
+            /\/git\/trees\//.test(url) ? tree('README.md', 'task-1/index.html', 'task-3/index.html', 'task-3/app.js')
+                : /raw\./.test(url) ? reply(404, '') : reply(200, { full_name: 'priya/tasks', private: false, default_branch: 'main', size: 0 })));
+        const gh = precheck.parseGitHub('https://github.com/priya/tasks/tree/main/task-3');
+        expect(gh).toEqual({ owner: 'priya', repo: 'tasks', path: 'task-3' });
+        const r = await precheck.githubRepo(gh);
+        expect(r).toMatchObject({ public: true, empty: false, folder: 'task-3', files: ['task-3/index.html', 'task-3/app.js', 'README.md', 'task-1/index.html'] });
+    });
+
+    it('a private or missing repository reads as not public, once git agrees', async () => {
+        mockFetch.mockImplementation(async (url) => reply(isGit(url) ? 401 : 404, {}));
         expect(await precheck.githubRepo({ owner: 'priya', repo: 'secret' })).toEqual({ public: false });
     });
 
-    it('a refused GITHUB_TOKEN does not stop the check: it asks again without it', async () => {
+    it('a 404 from the API for a repository git can open is not called private', async () => {
+        mockFetch.mockImplementation(async (url) => (isGit(url) ? reply(200, REFS) : reply(404, {})));
+        expect(await precheck.githubRepo({ owner: 'priya', repo: 'landing' })).toMatchObject({ public: true, empty: false, filesUnread: true });
+    });
+
+    it('a refused GITHUB_TOKEN does not stop the check: it asks again without it, and says so', async () => {
         process.env.GITHUB_TOKEN = 'expired';
         mockFetch.mockImplementation(async (url, opts) => (opts.headers.Authorization ? reply(401, {})
-            : /\/contents$|raw\./.test(url) ? reply(404, '') : reply(200, { full_name: 'priya/landing', private: false, size: 3 })));
+            : /\/git\/trees\//.test(url) ? tree('index.html') : /raw\./.test(url) ? reply(404, '')
+                : reply(200, { full_name: 'priya/landing', private: false, size: 3 })));
+        expect(precheck.githubTokenWorks()).toBe(true);
         const r = await precheck.githubRepo({ owner: 'priya', repo: 'landing' });
         expect(r.public).toBe(true);
         expect(mockFetch.mock.calls[0][1].headers.Authorization).toBe('Bearer expired');
         expect(mockFetch.mock.calls[1][1].headers.Authorization).toBeUndefined();
+        expect(precheck.githubTokenWorks()).toBe(false);
     });
 
     it('a repository pushed minutes ago, whose size GitHub still says is 0, is not called empty', async () => {
         mockFetch.mockImplementation(async (url) => (
-            /\/contents$/.test(url) ? reply(200, [{ name: 'index.html', type: 'file' }, { name: 'package.json', type: 'file' }])
+            /\/git\/trees\//.test(url) ? tree('index.html', 'package.json')
                 : /raw\.githubusercontent/.test(url) ? reply(404, '')
                     : reply(200, { full_name: 'priya/landing', private: false, default_branch: 'main', size: 0 })));
         const r = await precheck.githubRepo({ owner: 'priya', repo: 'landing' });
@@ -345,7 +367,7 @@ describe('GitHub', () => {
 
     it('a repository with no commits at all is empty', async () => {
         mockFetch.mockImplementation(async (url) => (
-            /\/contents$/.test(url) ? reply(404, { message: 'This repository is empty.' })
+            /\/git\/trees\//.test(url) ? reply(409, { message: 'Git Repository is empty.' })
                 : /raw\.githubusercontent/.test(url) ? reply(404, '')
                     : reply(200, { full_name: 'priya/landing', private: false, size: 0 })));
         expect(await precheck.githubRepo({ owner: 'priya', repo: 'landing' })).toMatchObject({ public: true, empty: true });
@@ -353,15 +375,26 @@ describe('GitHub', () => {
 
     it('a file list GitHub would not give (its hourly limit) is "not read", never "empty"', async () => {
         mockFetch.mockImplementation(async (url) => (
-            /\/contents$/.test(url) ? reply(403, {})
+            /\/git\/trees\//.test(url) ? reply(403, {})
                 : /raw\.githubusercontent/.test(url) ? reply(404, '')
                     : reply(200, { full_name: 'priya/landing', private: false, size: 0 })));
         const r = await precheck.githubRepo({ owner: 'priya', repo: 'landing' });
         expect(r).toMatchObject({ public: true, empty: false, filesUnread: true, files: [] });
     });
 
-    it("over GitHub's hourly limit, the repository is reported as not checked, not as private", async () => {
-        mockFetch.mockResolvedValue(reply(403, {}));
+    it("over GitHub's hourly limit, git still says the repository is public and has commits", async () => {
+        mockFetch.mockImplementation(async (url) => (isGit(url) ? reply(200, REFS) : reply(403, {})));
+        expect(await precheck.githubRepo({ owner: 'priya', repo: 'landing' }))
+            .toMatchObject({ public: true, empty: false, filesUnread: true, branch: 'main', fullName: 'priya/landing' });
+    });
+
+    it("over the limit, git's answer for a repository with no commits is empty", async () => {
+        mockFetch.mockImplementation(async (url) => (isGit(url) ? reply(200, EMPTY_REFS) : reply(403, {})));
+        expect(await precheck.githubRepo({ owner: 'priya', repo: 'landing' })).toMatchObject({ public: true, empty: true });
+    });
+
+    it('when neither the API nor git answers, the repository is "not checked", not private', async () => {
+        mockFetch.mockImplementation(async (url) => (isGit(url) ? reply(503, '') : reply(403, {})));
         expect(await precheck.githubRepo({ owner: 'priya', repo: 'landing' })).toEqual({ unknown: "GitHub's hourly limit was reached" });
     });
 });

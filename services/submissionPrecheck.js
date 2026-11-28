@@ -174,26 +174,67 @@ function parseGitHub(url) {
     try {
         const u = new URL(normalizeUrl(url));
         if (!/^(www\.)?github\.com$/i.test(u.hostname)) return null;
-        const [owner, repo] = u.pathname.split('/').filter(Boolean);
+        const [owner, repo, kind, , ...rest] = u.pathname.split('/').filter(Boolean).map(decodeURIComponent);
         if (!owner) return null;
-        return repo ? { owner, repo: repo.replace(/\.git$/i, '') } : { owner };
+        if (!repo) return { owner };
+        const out = { owner, repo: repo.replace(/\.git$/i, '') };
+        // ".../tree/main/task-3": one folder of a repository that holds every task.
+        if ((kind === 'tree' || kind === 'blob') && rest.length) out.path = rest.join('/');
+        return out;
     } catch (_) {
         return null;
     }
 }
 
 let tokenRefused = false;
+/** A GITHUB_TOKEN GitHub accepts: 5,000 lookups an hour instead of 60. */
+const githubTokenWorks = () => !!process.env.GITHUB_TOKEN && !tokenRefused;
 const githubHeaders = () => Object.assign(
     { 'User-Agent': 'TEN-portal', Accept: 'application/vnd.github+json' },
     process.env.GITHUB_TOKEN && !tokenRefused ? { Authorization: 'Bearer ' + process.env.GITHUB_TOKEN } : {}
 );
 
 /**
- * The repository as an anonymous visitor sees it. Without GITHUB_TOKEN GitHub
- * allows 60 lookups an hour from the server (two per check); past that the
- * repository part says "not checked" and the coordinator can press Re-check.
+ * What git itself says about a repository, the way `git clone` asks. This is
+ * not GitHub's API, so its hourly limit does not apply: it is how a
+ * repository is still checked when the API refuses.
+ *   { public: true, empty, branch }  anyone can clone it
+ *   { public: false }                GitHub asked for a sign-in: private, or not there
+ *   null                             no clear answer
  */
-async function githubRepo({ owner, repo }) {
+async function gitRefs({ owner, repo }) {
+    try {
+        const r = await httpFetch(`https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}.git/info/refs?service=git-upload-pack`,
+            { headers: { 'User-Agent': 'git/2.40.0' }, timeoutMs: 8000 });
+        if (r.status === 401 || r.status === 404) return { public: false };
+        if (!r.ok) return null;
+        const body = String(await r.text());
+        const branch = (body.match(/symref=HEAD:refs\/heads\/([^\s\0]+)/) || [])[1] || 'main';
+        // A repository with no commits lists no branch: only "capabilities^{}".
+        return { public: true, empty: !/refs\/heads\//.test(body.replace(/symref=HEAD:refs\/heads\/\S+/, '')), branch };
+    } catch (_) {
+        return null;
+    }
+}
+
+/** When the API could not answer: git's answer, or "not checked". */
+async function withoutApi(gh, why) {
+    const g = await gitRefs(gh);
+    if (!g) return { unknown: why };
+    if (!g.public) return { public: false };
+    return { public: true, fullName: `${gh.owner}/${gh.repo}`, description: '', language: '', branch: g.branch, pushedAt: null,
+        empty: g.empty, files: [], readme: '', ...(g.empty ? {} : { filesUnread: true }) };
+}
+
+/**
+ * The repository as an anonymous visitor sees it. With a GITHUB_TOKEN GitHub
+ * accepts, its API allows 5,000 lookups an hour; without one, 60 (two per
+ * check). When the API refuses or fails, git itself is asked (gitRefs), so a
+ * public repository is never reported as private, empty or unopened because
+ * of a limit.
+ */
+async function githubRepo(gh) {
+    const { owner, repo } = gh;
     const base = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
     try {
         let res = await httpFetch(base, { headers: githubHeaders(), timeoutMs: 8000 });
@@ -201,34 +242,40 @@ async function githubRepo({ owner, repo }) {
         // public repositories included. Asking anonymously still works.
         if (res.status === 401 && process.env.GITHUB_TOKEN && !tokenRefused) {
             tokenRefused = true;
-            console.warn('[pre-check] GitHub refused GITHUB_TOKEN; checking repositories without it.');
+            console.warn('[pre-check] GitHub refused GITHUB_TOKEN; checking repositories without it. Replace GITHUB_TOKEN in .env.');
             res = await httpFetch(base, { headers: githubHeaders(), timeoutMs: 8000 });
         }
-        if (res.status === 404) return { public: false };
-        if (res.status === 403 || res.status === 429) return { unknown: 'GitHub\'s hourly limit was reached' };
-        if (!res.ok) return { unknown: 'GitHub answered ' + res.status };
+        // A 404 from the API is checked with git before anyone is told "private".
+        if (res.status === 404) return withoutApi(gh, 'GitHub did not say whether the repository is public');
+        if (res.status === 403 || res.status === 429) return withoutApi(gh, 'GitHub\'s hourly limit was reached');
+        if (!res.ok) return withoutApi(gh, 'GitHub answered ' + res.status);
         const j = await res.json();
         const out = {
             public: !j.private, fullName: j.full_name || `${owner}/${repo}`, description: String(j.description || '').slice(0, 300),
             language: j.language || '', branch: j.default_branch || 'main', pushedAt: j.pushed_at || null,
             empty: false, files: [], readme: ''
         };
-        // GitHub's `size` is worked out some time after a push, so a repository
-        // pushed minutes ago can still say 0. Only the contents list can tell:
-        // GitHub answers 404 (or 409) for a repository with no commits at all.
-        // A list that could not be read (the hourly limit, a timeout) says
-        // nothing about the work, and is never read as "no files".
-        const [list, readme] = await Promise.all([
-            httpFetch(base + '/contents', { headers: githubHeaders(), timeoutMs: 8000 })
+        // Every file, not only the top folder: work is often in a subfolder
+        // ("task-3/index.html"), and a top folder of folders is not "no code".
+        // GitHub's `size` is worked out some time after a push, so it is not
+        // used. A tree GitHub answers 404 or 409 for is a repository with no
+        // commits; a tree that could not be read (the hourly limit, a timeout)
+        // says nothing about the work, and is never read as "no files".
+        const [tree, readme] = await Promise.all([
+            httpFetch(`${base}/git/trees/${encodeURIComponent(out.branch)}?recursive=1`, { headers: githubHeaders(), timeoutMs: 8000 })
                 .then(async (r) => (r.ok ? r.json() : { status: r.status })).catch(() => ({ status: 0 })),
             httpFetch(`https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(out.branch)}/README.md`,
                 { headers: { 'User-Agent': 'TEN-portal' }, timeoutMs: 8000 })
                 .then((r) => (r.ok ? r.text() : '')).catch(() => '')
         ]);
-        if (Array.isArray(list)) {
-            out.empty = list.length === 0;
-            out.files = list.slice(0, 40).map((f) => f.name + (f.type === 'dir' ? '/' : ''));
-        } else if (j.size === 0 && (list.status === 404 || list.status === 409)) {
+        if (tree && Array.isArray(tree.tree)) {
+            const files = tree.tree.filter((f) => f.type === 'blob').map((f) => f.path);
+            out.empty = files.length === 0;
+            // The folder the link points at first, then the rest.
+            const inFolder = gh.path ? files.filter((f) => f === gh.path || f.startsWith(gh.path + '/')) : [];
+            out.files = [...inFolder, ...files.filter((f) => !inFolder.includes(f))].slice(0, 60);
+            if (gh.path) out.folder = gh.path;
+        } else if (tree && (tree.status === 404 || tree.status === 409)) {
             out.empty = true;
         } else {
             out.filesUnread = true;
@@ -236,7 +283,7 @@ async function githubRepo({ owner, repo }) {
         out.readme = String(readme || '').slice(0, 2500);
         return out;
     } catch (err) {
-        return { unknown: 'GitHub could not be reached' };
+        return withoutApi(gh, 'GitHub could not be reached');
     }
 }
 
@@ -343,10 +390,15 @@ async function run(id, { screenshotExpected = true, notify = true, review = fals
         const url = firstUrl(sub.githubLink, sub.note);
         const github = url ? parseGitHub(url) : null;
         // Through module.exports, so a test can stand in for the network.
-        const [link, repo] = await Promise.all([
-            module.exports.checkLink(url),
-            github && github.repo ? module.exports.githubRepo(github) : Promise.resolve(null)
-        ]);
+        // A GitHub repository is checked through GitHub itself (githubRepo), not by
+        // opening its page: GitHub turns away page requests from servers (429),
+        // which said "the link does not open" about repositories that open fine.
+        const repo = github && github.repo ? await module.exports.githubRepo(github) : null;
+        const link = repo ? {
+            url,
+            verdict: repo.public ? 'opens' : 'unknown',
+            ...(repo.public === false ? { error: 'is a private or missing repository' } : {})
+        } : await module.exports.checkLink(url);
         const screenshot = {
             expected: !!screenshotExpected,
             present: !!sub.image && fs.existsSync(path.join(ROOT, String(sub.image).replace(/^\/+/, '')))
@@ -386,7 +438,7 @@ async function run(id, { screenshotExpected = true, notify = true, review = fals
                         : `- GitHub repository ${repo.fullName || ''}: ${repo.public ? 'public' : 'private or missing'}` +
                           `${repo.empty ? ', empty' : ''}${repo.language ? ', mostly ' + repo.language : ''}` +
                           `${repo.description ? ', described as "' + repo.description + '"' : ''}.`) : '',
-                    repo && repo.files && repo.files.length ? `- Files at the top of the repository: ${repo.files.join(', ')}` : '',
+                    repo && repo.files && repo.files.length ? `- Files in the repository${repo.folder ? ' (the link points at the folder "' + repo.folder + '", listed first)' : ''}: ${repo.files.join(', ')}` : '',
                     repo && repo.filesUnread ? '- The repository\'s file list could not be read just now. This says nothing about the work: do not call it empty.' : '',
                     screenshot.expected ? `- Screenshot: ${screenshot.present ? 'attached' : 'missing'}.` : '',
                     repo && repo.readme ? `README (start):\n${repo.readme}` : '',
@@ -489,6 +541,6 @@ async function tellStudent(sub, task, problems) {
 }
 
 module.exports = {
-    run, checkLink, parseGitHub, githubRepo, firstUrl, isPublicAddress,
+    run, checkLink, parseGitHub, githubRepo, gitRefs, githubTokenWorks, firstUrl, isPublicAddress,
     _internal: { requestOnce, guardedLookup, problemsOf, draftWithoutAi, normalizeUrl, withoutPromises }
 };

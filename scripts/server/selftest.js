@@ -89,6 +89,17 @@ async function main() {
         return 'uploads/documents is writable';
     });
 
+    // What the AI Coordinator sees of an intern's GitHub link, on this public repository.
+    await check('GitHub repositories can be checked', async () => {
+        const precheck = require(path.join(ROOT, 'services/submissionPrecheck'));
+        const r = await precheck.githubRepo(precheck.parseGitHub('https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1'));
+        if (r.unknown) throw new Error(r.unknown);
+        if (!r.public || r.empty) throw new Error('a public repository read as ' + (r.public ? 'empty' : 'private'));
+        const token = precheck.githubTokenWorks() ? 'GITHUB_TOKEN works'
+            : process.env.GITHUB_TOKEN ? 'GITHUB_TOKEN refused by GitHub, replace it (60 lookups an hour)' : 'no GITHUB_TOKEN (60 lookups an hour)';
+        return `public, ${r.filesUnread ? 'opened through git (API limit), files not listed' : r.files.length + ' files listed'}; ${token}`;
+    });
+
     // Student accounts with no internship record behind them: sign-in can only
     // tell them to finish registering (see /login and registerUser).
     const mongoose = require('mongoose');
