@@ -211,17 +211,28 @@ async function githubRepo({ owner, repo }) {
         const out = {
             public: !j.private, fullName: j.full_name || `${owner}/${repo}`, description: String(j.description || '').slice(0, 300),
             language: j.language || '', branch: j.default_branch || 'main', pushedAt: j.pushed_at || null,
-            empty: j.size === 0, files: [], readme: ''
+            empty: false, files: [], readme: ''
         };
-        if (out.empty) return out;
+        // GitHub's `size` is worked out some time after a push, so a repository
+        // pushed minutes ago can still say 0. Only the contents list can tell:
+        // GitHub answers 404 (or 409) for a repository with no commits at all.
+        // A list that could not be read (the hourly limit, a timeout) says
+        // nothing about the work, and is never read as "no files".
         const [list, readme] = await Promise.all([
             httpFetch(base + '/contents', { headers: githubHeaders(), timeoutMs: 8000 })
-                .then((r) => (r.ok ? r.json() : [])).catch(() => []),
+                .then(async (r) => (r.ok ? r.json() : { status: r.status })).catch(() => ({ status: 0 })),
             httpFetch(`https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(out.branch)}/README.md`,
                 { headers: { 'User-Agent': 'TEN-portal' }, timeoutMs: 8000 })
                 .then((r) => (r.ok ? r.text() : '')).catch(() => '')
         ]);
-        out.files = Array.isArray(list) ? list.slice(0, 40).map((f) => f.name + (f.type === 'dir' ? '/' : '')) : [];
+        if (Array.isArray(list)) {
+            out.empty = list.length === 0;
+            out.files = list.slice(0, 40).map((f) => f.name + (f.type === 'dir' ? '/' : ''));
+        } else if (j.size === 0 && (list.status === 404 || list.status === 409)) {
+            out.empty = true;
+        } else {
+            out.filesUnread = true;
+        }
         out.readme = String(readme || '').slice(0, 2500);
         return out;
     } catch (err) {
@@ -348,7 +359,7 @@ async function run(id, { screenshotExpected = true, notify = true, review = fals
             link: { url: link.url || url, verdict: link.verdict, status: link.status || null, error: link.error || '' },
             repo: repo ? {
                 public: repo.public, fullName: repo.fullName || '', language: repo.language || '',
-                pushedAt: repo.pushedAt || null, empty: !!repo.empty, unknown: repo.unknown || ''
+                pushedAt: repo.pushedAt || null, empty: !!repo.empty, filesUnread: !!repo.filesUnread, unknown: repo.unknown || ''
             } : null,
             screenshot,
             problems,
@@ -376,6 +387,7 @@ async function run(id, { screenshotExpected = true, notify = true, review = fals
                           `${repo.empty ? ', empty' : ''}${repo.language ? ', mostly ' + repo.language : ''}` +
                           `${repo.description ? ', described as "' + repo.description + '"' : ''}.`) : '',
                     repo && repo.files && repo.files.length ? `- Files at the top of the repository: ${repo.files.join(', ')}` : '',
+                    repo && repo.filesUnread ? '- The repository\'s file list could not be read just now. This says nothing about the work: do not call it empty.' : '',
                     screenshot.expected ? `- Screenshot: ${screenshot.present ? 'attached' : 'missing'}.` : '',
                     repo && repo.readme ? `README (start):\n${repo.readme}` : '',
                     '',

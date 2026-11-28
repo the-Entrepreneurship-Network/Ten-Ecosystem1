@@ -146,6 +146,9 @@ describe('the decision on a pre-checked submission', () => {
         expect(decide(check({ by: 'rules' }))).toEqual({ wait: 'the AI did not read it' });
         expect(decide(check({ link: { verdict: 'unknown' } }))).toEqual({ wait: 'the link could not be checked' });
         expect(decide(check({ link: { verdict: 'down' } }))).toEqual({ wait: 'the link could not be checked' });
+        // Files GitHub would not list were not read: the AI's "add your code" is no decision.
+        expect(decide(check({ decision: 'changes', match: 'no', draft: 'Your repository is empty.', repo: { public: true, empty: false, filesUnread: true } })))
+            .toEqual({ wait: "the repository's files could not be read" });
         // A check that failed is never "approve", even with Gemini's blessing.
         expect(decide(check({ by: 'rules', problems: ['There is no link to the work.'], draft: 'Add the link.' }))).toEqual({ status: 'Rejected', feedback: 'Add the link.' });
     });

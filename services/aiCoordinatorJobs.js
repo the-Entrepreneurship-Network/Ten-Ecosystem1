@@ -386,6 +386,8 @@ function decide(check) {
     if (!check) return { wait: 'no pre-check yet' };
     if (check.problems && check.problems.length) return { status: 'Rejected', feedback: check.draft };
     if (check.by !== 'ai') return { wait: 'the AI did not read it' };
+    // Nobody saw the files, so neither "approve" nor "add your code" is a decision.
+    if (check.repo && check.repo.filesUnread) return { wait: "the repository's files could not be read" };
     const opened = (check.link && check.link.verdict === 'opens') || (check.repo && check.repo.public && !check.repo.empty);
     if (!opened) return { wait: 'the link could not be checked' };
     if (check.match === 'no' || check.decision === 'changes') return { status: 'Rejected', feedback: check.draft };
