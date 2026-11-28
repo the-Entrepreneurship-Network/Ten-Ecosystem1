@@ -32,7 +32,7 @@ module.exports = [
             'i filled the google form but did not get employee id', 'request for employee id', 'could you please share my employee id to complete my onboarding', 'i joined as an intern please share my employee id',
             'i am shortlisted please provide my employee id', 'got shortlisted mail need my employee id',
             'i joined the group and filled the google form when will i get my employee id', 'when will i get my employee id',
-            'employee id is not in the shared documents', 'employee id not mentioned in my documents', 'i have recently joined please provide my employee id', 'need employee id to get my offer letter and documents',
+            'employee id is not in the shared documents', 'employee id not mentioned in my documents', 'i have recently joined please provide my employee id', 'need employee id to get my offer letter and documents', 'i do not know what my employee id is',
             'i didn\'t get employe id', 'didnt get employe id', 'employe id not received', 'i dont have my employe id', 'no employe id yet',
             'my name is not in the employee id spreadsheet', 'filled the employee id generation form but no id', 'name not appearing in employee id sheet',
             'employee id form response recorded but no id', 'please verify my employee id form submission',
@@ -384,7 +384,8 @@ module.exports = [
             'i was removed from the whatsapp group', 'community group link',
             'how can i join my domain whatsapp group', 'how to join the software engineer whatsapp group',
             'i registered how do i join the interns group', 'whatsapp group to connect with other interns',
-            'not able to join my domain group in the whatsapp community', 'cannot find the aiml group in whatsapp community'
+            'not able to join my domain group in the whatsapp community', 'cannot find the aiml group in whatsapp community',
+            'i am not able to join the tech group', 'how to join the web development group'
         ],
         answer: 'The group links are on your dashboard: open Guidelines, then Communication & Support. You will find the ' +
             "Support Group, the Employee ID Group and your domain's group there. After the joining steps, the " +
